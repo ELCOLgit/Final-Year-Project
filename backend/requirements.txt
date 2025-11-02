@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+faiss-cpu
+pymupdf
+sqlalchemy
+streamlit
+requests
+huggingface_hub
+sentence-transformers
