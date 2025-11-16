@@ -16,3 +16,7 @@ class Match(Base):
     user = relationship("User", back_populates="job_matches")
     resume = relationship("Resume", back_populates="matches")
     job_posting = relationship("JobPosting", back_populates="matches")
+
+from backend.models.user_model import User
+from backend.models.resume_model import Resume
+from backend.models.job_postings_model import JobPosting
