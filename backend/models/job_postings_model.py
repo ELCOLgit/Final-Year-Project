@@ -14,4 +14,5 @@ class JobPosting(Base):
     date_posted = Column(DateTime, default=datetime.utcnow)
 
     recruiter = relationship("User", back_populates="job_postings")
-    matches = relationship("Match", back_populates="job_postings", cascade="all, delete")
+    matches = relationship("Match", back_populates="job_posting", cascade="all, delete")
+
