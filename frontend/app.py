@@ -1,5 +1,11 @@
 import streamlit as st
 import requests
+import os
+
+css_path = os.path.join(os.path.dirname(__file__), "assets", "styles.css")
+with open(css_path) as f:
+    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 
 st.set_page_config(page_title="AI Career Advisor", page_icon="🧠", layout="wide")
 
