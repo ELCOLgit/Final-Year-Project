@@ -1,3 +1,4 @@
+from backend.controller import matchController
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,3 +20,5 @@ def root():
 async def upload_cv(file: UploadFile):
     content = await file.read()
     return {"filename": file.filename, "size": len(content)}
+
+app.include_router(matchController.router)
