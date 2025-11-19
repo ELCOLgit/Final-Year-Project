@@ -32,8 +32,33 @@ if uploaded_file is not None:
                 st.error("Upload failed. Please try again.")
         except requests.exceptions.ConnectionError:
             st.error("Cannot connect to the backend. Make sure FastAPI is running.")
+            
+# === Section2: Job Posting Upload ===
+st.markdown("---")
+st.subheader("📋 Upload a Job Posting")
 
-# === Section 2: View Matches ===
+with st.form("job_form"):
+    job_title = st.text_input("Job Title", placeholder="e.g., Software Engineer Intern")
+    job_description = st.text_area("Job Description", height=150, placeholder="Enter job description here...")
+    submitted = st.form_submit_button("Send to Backend")
+
+    if submitted:
+        if job_title and job_description:
+            data = {"title": job_title, "description": job_description}
+            try:
+                res = requests.post("http://127.0.0.1:8000/jobs/upload/", data=data)
+                if res.status_code == 200:
+                    st.success("✅ Job posted successfully!")
+                    st.json(res.json())
+                else:
+                    st.error(f"Upload failed: {res.text}")
+            except requests.exceptions.ConnectionError:
+                st.error("Cannot connect to backend. Make sure FastAPI is running.")
+        else:
+            st.warning("Please fill in both title and description.")
+
+
+# === Section 3: View Matches ===
 st.markdown("---")
 st.subheader("View Existing Matches")
 
