@@ -25,7 +25,7 @@ if uploaded_file is not None:
     if st.button("Send to Backend"):
         files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
         try:
-            response = requests.post(f"{backend_url}/upload-cv/", files=files)
+            response = requests.post(f"{backend_url}/resumes/upload/", files=files)
             if response.status_code == 200:
                 st.json(response.json())
             else:

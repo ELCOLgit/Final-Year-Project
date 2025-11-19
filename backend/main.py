@@ -1,6 +1,8 @@
-from backend.controller import matchController
+from backend.controller import matchController, resumeController
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+
+
 
 app = FastAPI()
 
@@ -22,3 +24,4 @@ async def upload_cv(file: UploadFile):
     return {"filename": file.filename, "size": len(content)}
 
 app.include_router(matchController.router)
+app.include_router(resumeController.router)
