@@ -57,8 +57,26 @@ with st.form("job_form"):
         else:
             st.warning("Please fill in both title and description.")
 
+# === Section 3: View Job Postings ===
+st.markdown("---")
+st.subheader("📄 View All Job Postings")
 
-# === Section 3: View Matches ===
+if st.button("Load Job Postings"):
+    try:
+        res = requests.get(f"{backend_url}/jobs/")
+        if res.status_code == 200:
+            jobs = res.json()
+            if not jobs:
+                st.info("No job postings found yet.")
+            else:
+                df_jobs = pd.DataFrame(jobs)
+                st.dataframe(df_jobs, use_container_width=True)
+        else:
+            st.error(f"Error fetching job postings: {res.text}")
+    except requests.exceptions.ConnectionError:
+        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+
+# === Section 4: View Matches ===
 st.markdown("---")
 st.subheader("View Existing Matches")
 
