@@ -117,3 +117,23 @@ if st.button("Load Matches"):
             st.error("Error fetching matches. Please check the backend.")
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
+
+# === Section 6: View Top Matches per CV ===
+st.markdown("---")
+st.subheader("Top Matches per Resume")
+
+if st.button("Load Top Matches"):
+    try:
+        res = requests.get(f"{backend_url}/matches/top/")
+        if res.status_code == 200:
+            data = res.json()["top_matches"]
+            if not data:
+                st.info("No matches found yet. Try generating matches first.")
+            else:
+                st.success("Showing best job match for each uploaded resume.")
+                df_top = pd.DataFrame(data)
+                st.dataframe(df_top, use_container_width=True)
+        else:
+            st.error(f"Error fetching top matches: {res.text}")
+    except requests.exceptions.ConnectionError:
+        st.error("Cannot connect to backend. Make sure FastAPI is running.")
