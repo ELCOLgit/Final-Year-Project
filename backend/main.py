@@ -1,7 +1,7 @@
-from backend.controller import matchController, resumeController
+from backend.controller import match_controller, resume_controller, job_posting_controller, match_generator_controller
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from backend.controller import jobPostingController
+
 
 
 app = FastAPI()
@@ -23,6 +23,7 @@ async def upload_cv(file: UploadFile):
     content = await file.read()
     return {"filename": file.filename, "size": len(content)}
 
-app.include_router(matchController.router)
-app.include_router(resumeController.router)
-app.include_router(jobPostingController.router)
+app.include_router(match_controller.router)
+app.include_router(resume_controller.router)
+app.include_router(job_posting_controller.router)
+app.include_router(match_generator_controller.router)

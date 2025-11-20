@@ -35,7 +35,7 @@ if uploaded_file is not None:
             
 # === Section2: Job Posting Upload ===
 st.markdown("---")
-st.subheader("📋 Upload a Job Posting")
+st.subheader("Upload a Job Posting")
 
 with st.form("job_form"):
     job_title = st.text_input("Job Title", placeholder="e.g., Software Engineer Intern")
@@ -48,7 +48,7 @@ with st.form("job_form"):
             try:
                 res = requests.post("http://127.0.0.1:8000/jobs/upload/", data=data)
                 if res.status_code == 200:
-                    st.success("✅ Job posted successfully!")
+                    st.success("Job posted successfully!")
                     st.json(res.json())
                 else:
                     st.error(f"Upload failed: {res.text}")
@@ -59,7 +59,7 @@ with st.form("job_form"):
 
 # === Section 3: View Job Postings ===
 st.markdown("---")
-st.subheader("📄 View All Job Postings")
+st.subheader("View All Job Postings")
 
 if st.button("Load Job Postings"):
     try:
