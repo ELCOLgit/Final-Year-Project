@@ -137,3 +137,30 @@ if st.button("Load Top Matches"):
             st.error(f"Error fetching top matches: {res.text}")
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
+
+# === Section 7: Recruiter Filtered Search ===
+st.markdown("---")
+st.subheader("Recruiter Match Filter")
+
+col1, col2 = st.columns(2)
+with col1:
+    job_filter = st.text_input("Search by Job Title", placeholder="e.g., Data Science")
+with col2:
+    score_filter = st.slider("Minimum Match Score", 0.0, 1.0, 0.3, 0.05)
+
+if st.button("Apply Filters"):
+    try:
+        params = {"job_title": job_filter, "min_score": score_filter}
+        res = requests.get(f"{backend_url}/matches/filter/", params=params)
+        if res.status_code == 200:
+            data = res.json()["filtered_matches"]
+            if not data:
+                st.info("No matches found for the selected filters.")
+            else:
+                st.success(f"Showing matches with score ≥ {score_filter}")
+                df_filtered = pd.DataFrame(data)
+                st.dataframe(df_filtered, use_container_width=True)
+        else:
+            st.error(f"Error fetching filtered matches: {res.text}")
+    except requests.exceptions.ConnectionError:
+        st.error("Cannot connect to backend. Make sure FastAPI is running.")

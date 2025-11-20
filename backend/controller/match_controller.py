@@ -66,3 +66,30 @@ def get_top_matches(db: Session = Depends(get_db)):
         })
 
     return {"top_matches": results}
+
+@router.get("/filter/")
+def filter_matches(
+    job_title: str = None,
+    min_score: float = 0.0,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Match)
+
+    # Filter by score
+    query = query.filter(Match.match_score >= min_score)
+
+    results = []
+    for m in query.all():
+        resume = db.query(Resume).filter(Resume.id == m.resume_id).first()
+        job = db.query(JobPosting).filter(JobPosting.id == m.job_posting_id).first()
+
+        if job_title and job and job_title.lower() not in job.title.lower():
+            continue
+
+        results.append({
+            "resume": resume.filename if resume else "N/A",
+            "job_title": job.title if job else "N/A",
+            "match_score": m.match_score
+        })
+
+    return {"filtered_matches": results}
