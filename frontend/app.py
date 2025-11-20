@@ -75,8 +75,30 @@ if st.button("Load Job Postings"):
             st.error(f"Error fetching job postings: {res.text}")
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
+        
+# === Section 4: Generate Matches ===
+st.markdown("---")
+st.subheader("Generate Matches Between Resumes and Jobs")
 
-# === Section 4: View Matches ===
+if st.button("Generate Matches"):
+    try:
+        res = requests.post(f"{backend_url}/generate/matches/")
+        if res.status_code == 200:
+            data = res.json()["generated_matches"]
+
+            if not data:
+                st.info("No matches were created or updated.")
+            else:
+                st.success("Matches generated successfully!")
+                df_matches = pd.DataFrame(data)
+                st.dataframe(df_matches, use_container_width=True)
+        else:
+            st.error(f"Error generating matches: {res.text}")
+    except requests.exceptions.ConnectionError:
+        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+
+
+# === Section 5: View Matches ===
 st.markdown("---")
 st.subheader("View Existing Matches")
 
