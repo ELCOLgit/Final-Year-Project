@@ -4,6 +4,8 @@ from backend.database import SessionLocal
 from backend.models.job_postings_model import JobPosting
 from backend.models.user_model import User, UserRole
 from datetime import datetime
+from backend.utils.dependencies import require_recruiter
+from fastapi import Depends
 
 router = APIRouter(
     prefix="/jobs",
@@ -19,7 +21,7 @@ def get_db():
         db.close()
 
 # === Upload job posting (for recruiters) ===
-@router.post("/upload/")
+@router.post("/upload/", dependencies=[Depends(require_recruiter)])
 async def upload_job_posting(
     title: str = Form(...),
     description: str = Form(...),

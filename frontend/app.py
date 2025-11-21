@@ -12,16 +12,44 @@ with open(css_path) as f:
 st.set_page_config(page_title="AI Career Advisor", page_icon="🧠", layout="wide")
 backend_url = "http://127.0.0.1:8000"
 
+# === Session state for authentication ===
+if "token" not in st.session_state:
+    st.session_state["token"] = None
+if "role" not in st.session_state:
+    st.session_state["role"] = None
+
 # === Header ===
 st.title("AI Career Advisor")
 st.write("Upload your CV to receive AI-driven feedback and career insights.")
 
-# === Section 1: Upload CV ===
-uploaded_file = st.file_uploader("Choose a PDF CV", type=["pdf"])
+# === Section 0: Login ===
+st.markdown("---")
+st.subheader("Login")
 
+email = st.text_input("Email")
+password = st.text_input("Password", type="password")
+
+if st.button("Login"):
+    res = requests.post(f"{backend_url}/auth/login/", params={"email": email, "password": password})
+    if res.status_code == 200:
+        data = res.json()
+        st.session_state["token"] = data["access_token"]
+        st.session_state["role"] = data["role"]
+        st.success(f"Logged in as {data['role']}")
+    else:
+        st.error("Invalid login credentials")
+
+if st.session_state["token"]:
+    if st.button("Logout"):
+        st.session_state["token"] = None
+        st.session_state["role"] = None
+        st.rerun()
+
+
+# === Section 1: Upload CV (public for now) ===
+uploaded_file = st.file_uploader("Choose a PDF CV", type=["pdf"])
 if uploaded_file is not None:
     st.success(f"Uploaded: {uploaded_file.name}")
-
     if st.button("Send to Backend"):
         files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
         try:
@@ -31,36 +59,39 @@ if uploaded_file is not None:
             else:
                 st.error("Upload failed. Please try again.")
         except requests.exceptions.ConnectionError:
-            st.error("Cannot connect to the backend. Make sure FastAPI is running.")
-            
-# === Section2: Job Posting Upload ===
+            st.error("Cannot connect to backend. Make sure FastAPI is running.")
+
+# === Section 2: Job Posting Upload (recruiter only) ===
 st.markdown("---")
 st.subheader("Upload a Job Posting")
 
-with st.form("job_form"):
-    job_title = st.text_input("Job Title", placeholder="e.g., Software Engineer Intern")
-    job_description = st.text_area("Job Description", height=150, placeholder="Enter job description here...")
-    submitted = st.form_submit_button("Send to Backend")
+if st.session_state["role"] == "recruiter":
+    with st.form("job_form"):
+        job_title = st.text_input("Job Title", placeholder="e.g., Software Engineer Intern")
+        job_description = st.text_area("Job Description", height=150, placeholder="Enter job description here...")
+        submitted = st.form_submit_button("Send to Backend")
 
-    if submitted:
-        if job_title and job_description:
-            data = {"title": job_title, "description": job_description}
-            try:
-                res = requests.post("http://127.0.0.1:8000/jobs/upload/", data=data)
-                if res.status_code == 200:
-                    st.success("Job posted successfully!")
-                    st.json(res.json())
-                else:
-                    st.error(f"Upload failed: {res.text}")
-            except requests.exceptions.ConnectionError:
-                st.error("Cannot connect to backend. Make sure FastAPI is running.")
-        else:
-            st.warning("Please fill in both title and description.")
+        if submitted:
+            if job_title and job_description:
+                data = {"title": job_title, "description": job_description}
+                headers = {"Authorization": f"Bearer {st.session_state['token']}"}
+                try:
+                    res = requests.post(f"{backend_url}/jobs/upload/", headers=headers, data=data)
+                    if res.status_code == 200:
+                        st.success("Job posted successfully!")
+                        st.json(res.json())
+                    else:
+                        st.error(f"Upload failed: {res.text}")
+                except requests.exceptions.ConnectionError:
+                    st.error("Cannot connect to backend. Make sure FastAPI is running.")
+            else:
+                st.warning("Please fill in both title and description.")
+else:
+    st.info("Login as a recruiter to access job posting upload.")
 
 # === Section 3: View Job Postings ===
 st.markdown("---")
 st.subheader("View All Job Postings")
-
 if st.button("Load Job Postings"):
     try:
         res = requests.get(f"{backend_url}/jobs/")
@@ -75,17 +106,15 @@ if st.button("Load Job Postings"):
             st.error(f"Error fetching job postings: {res.text}")
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
-        
+
 # === Section 4: Generate Matches ===
 st.markdown("---")
 st.subheader("Generate Matches Between Resumes and Jobs")
-
 if st.button("Generate Matches"):
     try:
         res = requests.post(f"{backend_url}/generate/matches/")
         if res.status_code == 200:
             data = res.json()["generated_matches"]
-
             if not data:
                 st.info("No matches were created or updated.")
             else:
@@ -97,17 +126,14 @@ if st.button("Generate Matches"):
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
 
-
 # === Section 5: View Matches ===
 st.markdown("---")
 st.subheader("View Existing Matches")
-
 if st.button("Load Matches"):
     try:
         res = requests.get(f"{backend_url}/matches/")
         if res.status_code == 200:
             data = res.json()["matches"]
-
             if not data:
                 st.info("No matches found yet.")
             else:
@@ -118,10 +144,9 @@ if st.button("Load Matches"):
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
 
-# === Section 6: View Top Matches per CV ===
+# === Section 6: Top Matches ===
 st.markdown("---")
 st.subheader("Top Matches per Resume")
-
 if st.button("Load Top Matches"):
     try:
         res = requests.get(f"{backend_url}/matches/top/")
@@ -138,10 +163,9 @@ if st.button("Load Top Matches"):
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
 
-# === Section 7: Recruiter Filtered Search ===
+# === Section 7: Recruiter Filter ===
 st.markdown("---")
 st.subheader("🔍 Recruiter Match Filter")
-
 col1, col2, col3 = st.columns(3)
 with col1:
     job_filter = st.text_input("Search by Job Title", placeholder="e.g., Data Science")
