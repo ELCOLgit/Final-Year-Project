@@ -1,195 +1,118 @@
 import streamlit as st
 import requests
 import os
-import pandas as pd
 
-# === Styling ===
+def navigate_to(page_name: str):
+    st.session_state["redirect_to"] = page_name
+    st.rerun()
+
+
+# === Load Styling ===
 css_path = os.path.join(os.path.dirname(__file__), "assets", "styles.css")
 with open(css_path) as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# === Page setup ===
+# === Page Setup ===
 st.set_page_config(page_title="AI Career Advisor", page_icon="🧠", layout="wide")
 backend_url = "http://127.0.0.1:8000"
 
-# === Session state for authentication ===
+# === Session State ===
 if "token" not in st.session_state:
     st.session_state["token"] = None
 if "role" not in st.session_state:
     st.session_state["role"] = None
+if "view" not in st.session_state:
+    st.session_state["view"] = "login"
 
-# === Header ===
-st.title("AI Career Advisor")
-st.write("Upload your CV to receive AI-driven feedback and career insights.")
+# === Center Layout ===
+col1, mid, col2 = st.columns([1, 2, 1])
+with mid:
+    st.title("AI Career Advisor")
+    st.markdown(
+        "<h5 style='text-align:center; color:#001F3F;'>Empowering your career journey with intelligent matching.</h5>",
+        unsafe_allow_html=True,
+    )
 
-# === Section 0: Login ===
-st.markdown("---")
-st.subheader("Login")
+    st.markdown("---")
 
-email = st.text_input("Email")
-password = st.text_input("Password", type="password")
+    # === Navigation Buttons ===
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("Login"):
+            st.session_state["view"] = "login"
+    with btn_col2:
+        if st.button("Register"):
+            st.session_state["view"] = "register"
 
-if st.button("Login"):
-    res = requests.post(f"{backend_url}/auth/login/", params={"email": email, "password": password})
-    if res.status_code == 200:
-        data = res.json()
-        st.session_state["token"] = data["access_token"]
-        st.session_state["role"] = data["role"]
-        st.success(f"Logged in as {data['role']}")
-    else:
-        st.error("Invalid login credentials")
+    st.markdown("---")
 
-if st.session_state["token"]:
-    if st.button("Logout"):
-        st.session_state["token"] = None
-        st.session_state["role"] = None
-        st.rerun()
+    # === LOGIN ===
+    if st.session_state["view"] == "login":
+        st.subheader("Login")
 
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("Email", placeholder="Enter your email", key="login_email")
+            password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_pass")
+            login_submit = st.form_submit_button("Login")
 
-# === Section 1: Upload CV (public for now) ===
-uploaded_file = st.file_uploader("Choose a PDF CV", type=["pdf"])
-if uploaded_file is not None:
-    st.success(f"Uploaded: {uploaded_file.name}")
-    if st.button("Send to Backend"):
-        files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
-        try:
-            response = requests.post(f"{backend_url}/resumes/upload/", files=files)
-            if response.status_code == 200:
-                st.json(response.json())
-            else:
-                st.error("Upload failed. Please try again.")
-        except requests.exceptions.ConnectionError:
-            st.error("Cannot connect to backend. Make sure FastAPI is running.")
-
-# === Section 2: Job Posting Upload (recruiter only) ===
-st.markdown("---")
-st.subheader("Upload a Job Posting")
-
-if st.session_state["role"] == "recruiter":
-    with st.form("job_form"):
-        job_title = st.text_input("Job Title", placeholder="e.g., Software Engineer Intern")
-        job_description = st.text_area("Job Description", height=150, placeholder="Enter job description here...")
-        submitted = st.form_submit_button("Send to Backend")
-
-        if submitted:
-            if job_title and job_description:
-                data = {"title": job_title, "description": job_description}
-                headers = {"Authorization": f"Bearer {st.session_state['token']}"}
-                try:
-                    res = requests.post(f"{backend_url}/jobs/upload/", headers=headers, data=data)
+            if login_submit:
+                if email and password:
+                    res = requests.post(f"{backend_url}/auth/login/", params={"email": email, "password": password})
                     if res.status_code == 200:
-                        st.success("Job posted successfully!")
-                        st.json(res.json())
+                        data = res.json()
+                        st.session_state["token"] = data["access_token"]
+                        st.session_state["role"] = data["role"]
+
+                        st.success(f"Welcome back, {data['role'].capitalize()}!")
+                        if data["role"] == "job_seeker":
+                            st.switch_page("pages/job_seeker_portal.py")
+                        elif data["role"] == "recruiter":
+                            st.switch_page("pages/recruiter_portal.py")
                     else:
-                        st.error(f"Upload failed: {res.text}")
-                except requests.exceptions.ConnectionError:
-                    st.error("Cannot connect to backend. Make sure FastAPI is running.")
-            else:
-                st.warning("Please fill in both title and description.")
-else:
-    st.info("Login as a recruiter to access job posting upload.")
+                        st.error("Invalid email or password. Please try again.")
+                else:
+                    st.warning("Please fill in both fields.")
 
-# === Section 3: View Job Postings ===
-st.markdown("---")
-st.subheader("View All Job Postings")
-if st.button("Load Job Postings"):
-    try:
-        res = requests.get(f"{backend_url}/jobs/")
-        if res.status_code == 200:
-            jobs = res.json()
-            if not jobs:
-                st.info("No job postings found yet.")
-            else:
-                df_jobs = pd.DataFrame(jobs)
-                st.dataframe(df_jobs, use_container_width=True)
-        else:
-            st.error(f"Error fetching job postings: {res.text}")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+        st.markdown(
+            "<p style='text-align:center;'><a href='#' style='color:#FFD700;'>Forgot your password?</a></p>",
+            unsafe_allow_html=True,
+        )
 
-# === Section 4: Generate Matches ===
-st.markdown("---")
-st.subheader("Generate Matches Between Resumes and Jobs")
-if st.button("Generate Matches"):
-    try:
-        res = requests.post(f"{backend_url}/generate/matches/")
-        if res.status_code == 200:
-            data = res.json()["generated_matches"]
-            if not data:
-                st.info("No matches were created or updated.")
-            else:
-                st.success("Matches generated successfully!")
-                df_matches = pd.DataFrame(data)
-                st.dataframe(df_matches, use_container_width=True)
-        else:
-            st.error(f"Error generating matches: {res.text}")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+    # === REGISTER ===
+    elif st.session_state["view"] == "register":
+        st.subheader("Create an Account")
 
-# === Section 5: View Matches ===
-st.markdown("---")
-st.subheader("View Existing Matches")
-if st.button("Load Matches"):
-    try:
-        res = requests.get(f"{backend_url}/matches/")
-        if res.status_code == 200:
-            data = res.json()["matches"]
-            if not data:
-                st.info("No matches found yet.")
-            else:
-                df = pd.DataFrame(data)
-                st.dataframe(df, use_container_width=True)
-        else:
-            st.error("Error fetching matches. Please check the backend.")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+        with st.form("register_form", clear_on_submit=False):
+            name = st.text_input("Full Name", placeholder="e.g., John Doe")
+            email = st.text_input("Email Address", placeholder="e.g., johndoe@example.com")
+            password = st.text_input("Password", type="password", placeholder="Enter a secure password")
+            role_display = st.selectbox("Role", ["Job Seeker", "Recruiter"], index=0)
+            role = "job_seeker" if role_display == "Job Seeker" else "recruiter"
+            register_submit = st.form_submit_button("Register")
 
-# === Section 6: Top Matches ===
-st.markdown("---")
-st.subheader("Top Matches per Resume")
-if st.button("Load Top Matches"):
-    try:
-        res = requests.get(f"{backend_url}/matches/top/")
-        if res.status_code == 200:
-            data = res.json()["top_matches"]
-            if not data:
-                st.info("No matches found yet. Try generating matches first.")
-            else:
-                st.success("Showing best job match for each uploaded resume.")
-                df_top = pd.DataFrame(data)
-                st.dataframe(df_top, use_container_width=True)
-        else:
-            st.error(f"Error fetching top matches: {res.text}")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+            if register_submit:
+                if name and email and password:
+                    res = requests.post(
+                        f"{backend_url}/auth/register/",
+                        params={"name": name, "email": email, "password": password, "role": role},
+                    )
+                    if res.status_code == 200:
+                        st.success("Account created successfully! You can now log in.")
+                        st.session_state["view"] = "login"
+                    elif res.status_code == 400:
+                        st.warning("This email is already registered.")
+                    else:
+                        st.error("Registration failed. Please try again.")
+                else:
+                    st.warning("All fields are required.")
 
-# === Section 7: Recruiter Filter ===
-st.markdown("---")
-st.subheader("🔍 Recruiter Match Filter")
-col1, col2, col3 = st.columns(3)
-with col1:
-    job_filter = st.text_input("Search by Job Title", placeholder="e.g., Data Science")
-with col2:
-    score_filter = st.slider("Minimum Match Score", 0.0, 1.0, 0.3, 0.05)
-with col3:
-    sort_order = st.radio("Sort Order", ["Highest First", "Lowest First"])
-
-if st.button("Apply Filters"):
-    try:
-        params = {"job_title": job_filter, "min_score": score_filter}
-        res = requests.get(f"{backend_url}/matches/filter/", params=params)
-        if res.status_code == 200:
-            data = res.json()["filtered_matches"]
-            if not data:
-                st.info("No matches found for the selected filters.")
-            else:
-                reverse_sort = True if sort_order == "Highest First" else False
-                df_filtered = pd.DataFrame(data).sort_values(
-                    by="match_score", ascending=not reverse_sort
-                )
-                st.success(f"Showing matches (sorted by score {sort_order.lower()})")
-                st.dataframe(df_filtered, use_container_width=True)
-        else:
-            st.error(f"Error fetching filtered matches: {res.text}")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+    # === Accessibility Footer ===
+    st.markdown(
+        """
+        <div style='margin-top:2rem; text-align:center; font-size:0.9rem; color:#555;'>
+        <strong>Accessibility:</strong> This form supports keyboard navigation and screen readers.
+        Use <kbd>Tab</kbd> to move between fields and <kbd>Enter</kbd> to submit.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
