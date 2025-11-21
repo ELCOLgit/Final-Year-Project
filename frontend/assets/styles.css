@@ -1,3 +1,102 @@
+/* === Global Styles === */
 body {
-    background-color: #f7f5f2;
+    background-color: #fffceb; /* soft cream */
+    color: #001F3F; /* navy blue text */
+    font-family: "Segoe UI", Arial, sans-serif;
+    line-height: 1.6;
+}
+
+/* === Headings === */
+h1, h2, h3, h4, h5 {
+    color: #042341;
+    font-weight: 600;
+}
+
+/* === Streamlit Buttons === */
+button[kind="primary"],
+.stButton > button {
+    background-color: #042341 !important; /* navy */
+    color: #fffceb !important; /* cream */
+    border-radius: 8px;
+    padding: 0.6em 1.2em;
+    border: none;
+    font-size: 1rem;
+    transition: all 0.2s ease-in-out;
+}
+
+button[kind="primary"]:hover,
+.stButton > button:hover {
+    background-color: #003366 !important;
+    transform: scale(1.03);
+}
+
+/* === Inputs and Text Areas === */
+.stTextInput > div > div > input,
+.stTextArea > div > textarea {
+    background-color: #ffffff !important;
+    border: 1.5px solid #001F3F !important;
+    color: #001F3F !important;
+    border-radius: 6px;
+    padding: 0.5em;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > textarea:focus {
+    outline: 2px solid #003366 !important;
+    box-shadow: 0 0 0 3px rgba(0, 31, 63, 0.2);
+}
+
+/* === File Uploader === */
+.stFileUploader > div > div {
+    border: 2px dashed #001F3F !important;
+    border-radius: 8px;
+    background-color: #fff;
+}
+
+/* === Tables === */
+.stDataFrame {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* === Alerts (success, warning, error) === */
+.stSuccess {
+    background-color: #e7f5e6 !important;
+    border-left: 5px solid #007b33 !important;
+}
+
+.stWarning {
+    background-color: #fff9e6 !important;
+    border-left: 5px solid #f5a623 !important;
+}
+
+.stError {
+    background-color: #ffe6e6 !important;
+    border-left: 5px solid #cc0000 !important;
+}
+
+/* === Accessibility Enhancements === */
+:focus-visible {
+    outline: 3px solid #ffcc00;
+    outline-offset: 3px;
+}
+
+/* === Center alignment utilities === */
+.center-text {
+    text-align: center;
+}
+
+.center-block {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* === Footer === */
+.footer {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #444;
+    margin-top: 3em;
 }
