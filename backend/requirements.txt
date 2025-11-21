@@ -9,3 +9,5 @@ huggingface_hub
 sentence-transformers
 python-multipart
 scikit-learn
+PyJWT==2.9.0
+pandas

@@ -1,4 +1,4 @@
-from backend.controller import match_controller, resume_controller, job_posting_controller, match_generator_controller
+from backend.controller import match_controller, resume_controller, job_posting_controller, match_generator_controller, auth_controller
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,3 +27,4 @@ app.include_router(match_controller.router)
 app.include_router(resume_controller.router)
 app.include_router(job_posting_controller.router)
 app.include_router(match_generator_controller.router)
+app.include_router(auth_controller.router)
