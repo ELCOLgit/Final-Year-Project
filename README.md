@@ -7,13 +7,13 @@ On the recruiter side of the applications, they will be able to upload job posti
 The goal is to make recruitment and job seeking more transparent, ethical and data driven, by giving users useful insights into decision making.
 
 The final deliverable will be a working prototype with a functional AI backend, a clean accessible UI and a working dashboard for data visualisation.
-
-Backend Folder
-backend/main.py
+**
+_Backend Folder**_
+**backend/main.py**
 
 This is the entry point for the backend API. It starts the FastAPI server, loads the routes, and enables communication between the frontend and the backend.
 
-backend/database/
+**backend/database/**
 
 Stores everything related to application data storage.
 
@@ -36,7 +36,7 @@ Contains the endpoints for uploading job descriptions and returning matched cand
 analysis_router.py
 Contains the endpoints that run AI processing, such as generating summaries, extracting skills or performing job matching.
 
-backend/services/
+**backend/services/**
 
 Contains the logic that the routers call. These files do the heavy lifting.
 
@@ -49,7 +49,7 @@ Responsible for comparing applicant CVs with job descriptions and generating mat
 file_service.py
 Manages file uploads and temporary storage for the resumes.
 
-backend/utils/
+**backend/utils/**
 
 Small helper functions used across the backend.
 
@@ -59,12 +59,12 @@ Extracts text from PDFs, Word documents or other resume formats.
 helpers.py
 Shared utility functions, for example cleaning text, formatting output or checking file types.
 
-Frontend Folder
-frontend/app.py
+_**Frontend Folder**_
+**frontend/app.py**
 
 The main entry point for the Streamlit interface. This file controls page navigation and UI structure.
 
-frontend/pages/
+**frontend/pages/**
 
 Contains each page of the web app, shown separately in Streamlit.
 
@@ -88,9 +88,9 @@ Shows the AI’s extracted skills, summaries and feedback after a CV is uploaded
 
 Recruiter_Dashboard.py
 Displays candidate scores, sorted lists and match visualisations for recruiters.
-
+**
 frontend/components/
-
+**
 Reusable UI components shared across different pages.
 
 navbar.py
@@ -99,7 +99,7 @@ Controls the navigation bar at the top of each page.
 cards.py
 Contains small UI widgets that show results like extracted skills, match scores or job summaries.
 
-frontend/assets/
+**frontend/assets**/
 
 Stores static UI resources.
 
