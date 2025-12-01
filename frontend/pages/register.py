@@ -47,4 +47,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("<p style='text-align:center;'>Already a user? <a href='Login' style='color:#FF4081;'>LOGIN</a></p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>Already a user? <a href='login' style='color:#FF4081;'>LOGIN</a></p>", unsafe_allow_html=True)
