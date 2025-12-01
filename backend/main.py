@@ -2,8 +2,6 @@ from backend.controller import match_controller, resume_controller, job_posting_
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-
-
 app = FastAPI()
 
 app.add_middleware(

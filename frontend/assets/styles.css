@@ -12,11 +12,51 @@ h1, h2, h3, h4, h5 {
     font-weight: 600;
 }
 
+/* === NAVBAR STYLES === */
+.navbar {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    background-color: #ffffff !important;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #ddd;
+    position: sticky;
+    top: 0;
+    z-index: 999;
+}
+
+.navbar-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #042341 !important;
+}
+
+.navbar-links {
+    display: flex !important;
+    gap: 12px;
+    align-items: center;
+}
+
+.navbar-links a {
+    text-decoration: none !important;
+    background-color: #042341 !important;
+    color: #fffceb !important;
+    padding: 8px 16px !important;
+    border-radius: 6px;
+    font-size: 0.9rem !important;
+    font-weight: 500;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.navbar-links a:hover {
+    background-color: #003366 !important;
+}
+
 /* === Streamlit Buttons === */
 button[kind="primary"],
 .stButton > button {
-    background-color: #042341 !important; /* navy */
-    color: #fffceb !important; /* cream */
+    background-color: #042341 !important;
+    color: #fffceb !important;
     border-radius: 8px;
     padding: 0.6em 1.2em;
     border: none;
@@ -60,7 +100,7 @@ button[kind="primary"]:hover,
     overflow: hidden;
 }
 
-/* === Alerts (success, warning, error) === */
+/* === Alerts === */
 .stSuccess {
     background-color: #e7f5e6 !important;
     border-left: 5px solid #007b33 !important;
@@ -76,13 +116,13 @@ button[kind="primary"]:hover,
     border-left: 5px solid #cc0000 !important;
 }
 
-/* === Accessibility Enhancements === */
+/* === Accessibility === */
 :focus-visible {
     outline: 3px solid #ffcc00;
     outline-offset: 3px;
 }
 
-/* === Center alignment utilities === */
+/* === Utilities === */
 .center-text {
     text-align: center;
 }

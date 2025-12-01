@@ -10,7 +10,7 @@ class Resume(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     filename = Column(String)
     text_content = Column(Text)
-    embedding = Column(Text)  # store as JSON or string for simplicity
+    embedding = Column(Text)  
     upload_date = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="resumes")
