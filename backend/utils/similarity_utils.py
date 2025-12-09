@@ -1,10 +1,18 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-def calculate_similarity(cv_text: str, job_text: str) -> float:
-    if not cv_text or not job_text:
-        return 0.0
-    vectorizer = TfidfVectorizer(stop_words='english')
-    tfidf = vectorizer.fit_transform([cv_text, job_text])
-    similarity = cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0]
-    return round(float(similarity), 3)
+
+def compute_similarity_matrix(resume_texts, job_texts):
+    """Compute resume × job similarity matrix."""
+    if not resume_texts or not job_texts:
+        return []
+
+    vectorizer = TfidfVectorizer(stop_words="english")
+    tfidf = vectorizer.fit_transform(resume_texts + job_texts)
+
+    resume_vecs = tfidf[:len(resume_texts)]
+    job_vecs = tfidf[len(resume_texts):]
+
+    sim_matrix = cosine_similarity(resume_vecs, job_vecs)
+    return sim_matrix.round(3)
+
