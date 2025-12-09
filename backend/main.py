@@ -21,8 +21,9 @@ async def upload_cv(file: UploadFile):
     content = await file.read()
     return {"filename": file.filename, "size": len(content)}
 
-app.include_router(match_controller.router)
-app.include_router(resume_controller.router)
-app.include_router(job_posting_controller.router)
-app.include_router(match_generator_controller.router)
 app.include_router(auth_controller.router)
+app.include_router(job_posting_controller.router)
+app.include_router(resume_controller.router)
+app.include_router(match_controller.router)
+app.include_router(match_generator_controller.router)
+
