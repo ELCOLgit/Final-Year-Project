@@ -1,37 +1,47 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
 from sqlalchemy.orm import Session
-from backend.database import get_db
+from backend.database import SessionLocal
 from backend.models.user_model import User, UserRole
-from backend.utils.auth_utils import decode_access_token
 
-SECRET_KEY = "SECRET_KEY_HERE"   # MUST MATCH auth_utils.py
+SECRET_KEY = "SECRET_KEY_HERE"
 ALGORITHM = "HS256"
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login/")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login/")
 
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    payload = decode_access_token(token)
-
-    if payload is None or payload.get("sub") is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    user = db.query(User).filter(User.email == payload["sub"]).first()
-
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    return user
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-def require_recruiter(user: User = Depends(get_current_user)):
-    if user.role != UserRole.recruiter:
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        user = db.query(User).filter(User.email == email).first()
+
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        return user  # RETURN ORM USER OBJECT
+
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def require_recruiter(current_user: User = Depends(get_current_user)):
+    if current_user.role != UserRole.recruiter:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Recruiter access required"
         )
-    return user
+    return current_user

@@ -93,20 +93,17 @@ st.subheader("View Candidate Matches")
 
 if st.button("Generate & View Matches"):
     try:
-        res = requests.post(f"{backend_url}/generate/matches/")
+        headers = {"Authorization": f"Bearer {st.session_state['token']}"}
+        res = requests.post(f"{backend_url}/generate/matches/", headers=headers)
         if res.status_code == 200:
-            data = res.json().get("generated_matches", [])
-            if not data:
-                st.info("No matches generated yet.")
-            else:
-                st.success("Matches generated successfully!")
-                df_matches = pd.DataFrame(data)
-                st.dataframe(df_matches, use_container_width=True)
+            result = res.json()
+            st.success("Match generation complete!")
+            st.json(result)
         else:
             st.error(f"Error generating matches: {res.text}")
+
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
-
 # === Logout ===
 st.markdown("---")
 if st.button("Logout"):

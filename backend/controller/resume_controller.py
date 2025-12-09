@@ -1,8 +1,9 @@
-from fastapi import APIRouter, UploadFile, Depends
+from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal, DATABASE_URL
 from backend.models.resume_model import Resume
-from backend.models.user_model import User, UserRole
+from backend.models.user_model import User
+from backend.utils.dependencies import get_current_user
 import fitz
 from datetime import datetime
 import os
@@ -12,12 +13,7 @@ router = APIRouter(
     tags=["Resumes"]
 )
 
-# === Debug route: show database path ===
-@router.get("/db-path")
-def get_db_path():
-    return {"database_path": os.path.abspath(DATABASE_URL.replace("sqlite:///", ""))}
-
-# === Dependency to get DB session ===
+# === Read DB session ===
 def get_db():
     db = SessionLocal()
     try:
@@ -25,7 +21,12 @@ def get_db():
     finally:
         db.close()
 
-# === Helper: extract text from PDF ===
+# === Debug route ===
+@router.get("/db-path")
+def get_db_path():
+    return {"database_path": os.path.abspath(DATABASE_URL.replace("sqlite:///", ""))}
+
+# === Extract text from PDF ===
 def extract_text_from_pdf(file: UploadFile) -> str:
     pdf_text = ""
     with fitz.open(stream=file.file.read(), filetype="pdf") as pdf_doc:
@@ -33,23 +34,26 @@ def extract_text_from_pdf(file: UploadFile) -> str:
             pdf_text += page.get_text("text")
     return pdf_text.strip()
 
-# === Upload and parse a CV ===
+
+# ==============================
+#   UPLOAD RESUME (AUTH REQUIRED)
+# ==============================
 @router.post("/upload/")
-async def upload_resume(file: UploadFile, db: Session = Depends(get_db)):
+async def upload_resume(
+    file: UploadFile,
+    current_user: User = Depends(get_current_user),   # <-- ORM user directly
+    db: Session = Depends(get_db)
+):
+    # current_user is already a User model instance
+    user = current_user  
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Authenticated user not found")
+
+    # Extract resume text
     text_content = extract_text_from_pdf(file)
 
-    user = db.query(User).filter(User.id == 1).first()
-    if not user:
-        user = User(
-            name="Demo Seeker",
-            email="demo@example.com",
-            password_hash="123",
-            role=UserRole.job_seeker
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
+    # Save resume
     resume = Resume(
         user_id=user.id,
         filename=file.filename,
@@ -63,13 +67,14 @@ async def upload_resume(file: UploadFile, db: Session = Depends(get_db)):
     db.refresh(resume)
 
     return {
-        "message": "Resume uploaded and parsed successfully",
-        "user": user.name,
+        "message": "Resume uploaded successfully",
+        "uploaded_by": user.email,
+        "user_id": user.id,
         "resume_id": resume.id,
-        "text_preview": text_content[:400] + "..." if len(text_content) > 400 else text_content
+        "filename": file.filename,
     }
 
-# === View all resumes ===
+# === List all resumes (DEBUG) ===
 @router.get("/")
 def list_resumes(db: Session = Depends(get_db)):
     resumes = db.query(Resume).all()
@@ -78,7 +83,7 @@ def list_resumes(db: Session = Depends(get_db)):
             "id": r.id,
             "filename": r.filename,
             "upload_date": r.upload_date,
-            "user_id": r.user_id
+            "user_id": r.user_id,
         }
         for r in resumes
     ]
