@@ -35,6 +35,7 @@ st.markdown(
     "<h5 style='color:#001F3F;'>Manage job postings and view matches for applicants.</h5>",
     unsafe_allow_html=True
 )
+st.write("DEBUG: token =", st.session_state.get("token"))
 
 # === Upload Job Posting ===
 st.markdown("---")
@@ -48,8 +49,15 @@ with st.form("job_form"):
     if submit_job:
         if title and description:
             data = {"title": title, "description": description}
+            headers = {
+            "Authorization": f"Bearer {st.session_state['token']}"
+            }   
             try:
-                res = requests.post(f"{backend_url}/jobs/upload/", data=data)
+                res = requests.post(
+                    f"{backend_url}/jobs/upload/",
+                    data=data,
+                    headers=headers
+                    )
                 if res.status_code == 200:
                     st.success("Job posted successfully!")
                     st.json(res.json())

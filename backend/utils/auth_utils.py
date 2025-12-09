@@ -1,11 +1,13 @@
 import hashlib
 import hmac
 import os
-import jwt
+import jwt, JWTError
 from datetime import datetime, timedelta
+from typing import Optional
 
-SECRET_KEY = "supersecretkey"  # change this later
+SECRET_KEY = "SECRET_KEY_HERE"
 ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
