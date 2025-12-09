@@ -6,6 +6,8 @@ from backend.models.user_model import User, UserRole
 from datetime import datetime
 from backend.utils.dependencies import require_recruiter
 from fastapi import Depends
+from fastapi import Path
+from urllib.parse import unquote
 
 router = APIRouter(
     prefix="/jobs",
@@ -85,3 +87,19 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
         "title": job.title,
         "description": job.description
     }
+
+@router.get("/get-by-title/{title}")
+def get_job_by_title(title: str = Path(...), db: Session = Depends(get_db)):
+    title = unquote(title)
+    job = db.query(JobPosting).filter(JobPosting.title == title).first()
+
+    if not job:
+        return {"description": "", "title": title}  # prevents crashes
+
+    return {
+        "id": job.id,
+        "title": job.title,
+        "description": job.description,
+        "date_posted": job.date_posted
+    }
+
