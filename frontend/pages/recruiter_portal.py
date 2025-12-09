@@ -12,110 +12,120 @@ with open(css_path) as f:
 st.set_page_config(page_title="Recruiter Portal", page_icon="💼", layout="wide")
 backend_url = "http://127.0.0.1:8000"
 
-# === Auth and Role Check ===
+# === Auth Check ===
 if "token" not in st.session_state or st.session_state["token"] is None:
-    st.warning("Please log in first to access your portal.")
-    if st.button("Back to Login"):
-        st.rerun()
-    st.markdown("<meta http-equiv='refresh' content='1; url=/'>", unsafe_allow_html=True)
+    st.warning("Please log in first.")
     st.stop()
 
 if st.session_state.get("role") != "recruiter":
-    st.error("Access denied. Only recruiters can access this page.")
-    if st.button("Return to your portal"):
-        if st.session_state.get("role") == "job_seeker":
-            st.switch_page("pages/job_seeker_portal.py")
-        else:
-            st.rerun()
+    st.error("Access denied.")
     st.stop()
 
-# === Header ===
+headers = {"Authorization": f"Bearer {st.session_state['token']}"}
+
+# === HEADER ===
 st.title("Recruiter Dashboard")
-st.markdown(
-    "<h5 style='color:#001F3F;'>Manage job postings and view matches for applicants.</h5>",
-    unsafe_allow_html=True
-)
+st.markdown("<h5 style='color:#001F3F;'>Manage job postings and analyze AI-generated candidate matches.</h5>", unsafe_allow_html=True)
 
-
-# === Upload Job Posting ===
 st.markdown("---")
-st.subheader("Upload a New Job Posting")
 
-with st.form("job_form"):
-    title = st.text_input("Job Title", placeholder="e.g., Software Engineer Intern")
-    description = st.text_area("Job Description", height=150, placeholder="Enter job description here...")
-    submit_job = st.form_submit_button("Upload Job Posting")
+# ====================================================
+#            JOB POSTING UPLOAD SECTION
+# ====================================================
+st.subheader("📄 Create a New Job Posting")
 
-    if submit_job:
-        if title and description:
-            data = {"title": title, "description": description}
-            headers = {
-            "Authorization": f"Bearer {st.session_state['token']}"
-            }   
-            try:
+col1, col2 = st.columns([1.5, 2])
+
+with col1:
+    st.markdown("### Job Details")
+
+    with st.form("job_form"):
+        title = st.text_input("Job Title", placeholder="e.g., Junior Backend Developer")
+        description = st.text_area("Job Description", height=180, placeholder="Describe the skills, responsibilities, and qualifications...")
+
+        submit_job = st.form_submit_button("Upload Job Posting")
+
+        if submit_job:
+            if title and description:
                 res = requests.post(
                     f"{backend_url}/jobs/upload/",
-                    data=data,
+                    data={"title": title, "description": description},
                     headers=headers
-                    )
+                )
                 if res.status_code == 200:
                     st.success("Job posted successfully!")
-                    st.json(res.json())
                 else:
-                    st.error(f"Upload failed: {res.text}")
-            except requests.exceptions.ConnectionError:
-                st.error("Cannot connect to backend. Make sure FastAPI is running.")
-        else:
-            st.warning("Please fill in both title and description fields.")
-
-# === View All Jobs ===
-st.markdown("---")
-st.subheader("View All Job Postings")
-
-if st.button("Load All Jobs"):
-    try:
-        res = requests.get(f"{backend_url}/jobs/")
-        if res.status_code == 200:
-            jobs = res.json()
-            if not jobs:
-                st.info("No job postings found yet.")
+                    st.error(res.text)
             else:
-                df_jobs = pd.DataFrame(jobs)
-                st.dataframe(df_jobs, use_container_width=True)
-        else:
-            st.error(f"Error fetching jobs: {res.text}")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend. Make sure FastAPI is running.")
+                st.warning("Please fill in all fields.")
 
-# === View Matches ===
-st.markdown("---")
-st.subheader("View Candidate Matches")
+with col2:
+    st.markdown("### Recently Added Jobs")
 
-if st.button("Generate & View Matches"):
     try:
-        headers = {"Authorization": f"Bearer {st.session_state['token']}"}
+        job_res = requests.get(f"{backend_url}/jobs/")
+        if job_res.status_code == 200:
+            jobs = job_res.json()
+            if jobs:
+                df_jobs = pd.DataFrame(jobs)
+                st.dataframe(df_jobs, height=260, use_container_width=True)
+            else:
+                st.info("No job postings available.")
+        else:
+            st.error(job_res.text)
+    except:
+        st.error("Backend unavailable.")
+
+st.markdown("---")
+
+# ====================================================
+#            MATCH GENERATION SECTION
+# ====================================================
+st.subheader("🔍 AI Match Generation")
+
+st.markdown("Click below to analyze all candidate resumes and generate matching scores.")
+
+if st.button("Generate & View Matches", use_container_width=True):
+    try:
         res = requests.post(f"{backend_url}/generate/matches/", headers=headers)
         if res.status_code == 200:
             result = res.json()
-            st.success("Match generation complete!")
-            st.json(result)
+
+            st.success("Match generation completed!")
+
+            # metrics summary
+            st.markdown("### Match Generation Summary")
+
+            summary = {
+                "Processed Resumes": result.get("processed_resumes"),
+                "Processed Jobs": result.get("processed_jobs"),
+                "New Matches": result.get("new_matches"),
+                "Updated Matches": result.get("updated_matches"),
+                "Removed Low Matches": result.get("removed_low_matches"),
+                "Threshold": result.get("threshold")
+            }
+
+            df_summary = pd.DataFrame(summary.items(), columns=["Metric", "Value"])
+            st.table(df_summary)
+
+            with st.expander("🔎 Raw Match Generation Output (Debug)"):
+                st.json(result)
+
         else:
             st.error(f"Error generating matches: {res.text}")
 
     except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend. Make sure FastAPI is running.")
-# === Logout ===
+        st.error("Cannot connect to backend.")
+
 st.markdown("---")
+
+# LOGOUT
 if st.button("Logout"):
     st.session_state.clear()
     st.rerun()
-# === Accessibility Footer ===
-st.markdown(
-    """
-    <div style='margin-top:2rem; text-align:center; font-size:0.9rem; color:#555;'>
-    <strong>Accessibility:</strong> Use <kbd>Tab</kbd> to move through upload and buttons.
-    High contrast colors are enabled for better readability.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+
+st.markdown("""
+<div style='margin-top:2rem; text-align:center; font-size:0.9rem; color:#555;'>
+<strong>Accessibility:</strong> Fully keyboard navigable. High-contrast mode supported.
+</div>
+""", unsafe_allow_html=True)
