@@ -53,3 +53,18 @@ def get_top_matches(db: Session = Depends(get_db)):
             })
 
     return {"top_matches": results}
+
+@router.get("/matches/debug/")
+def debug_matches(db: Session = Depends(get_db)):
+    matches = db.query(Match).all()
+    return [
+        {
+            "id": m.id,
+            "user": m.user.name if m.user else None,
+            "resume": m.resume.file_name if m.resume else None,
+            "job_title": m.job_posting.title if m.job_posting else None,
+            "score": m.match_score,
+            "created_at": m.created_at,
+        }
+        for m in matches
+    ]

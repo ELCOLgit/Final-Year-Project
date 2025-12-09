@@ -24,7 +24,7 @@ if st.session_state.get("role") != "recruiter":
     st.error("Access denied. Only recruiters can access this page.")
     if st.button("Return to your portal"):
         if st.session_state.get("role") == "job_seeker":
-            st.switch_page("pages/job_seeker_portal")
+            st.switch_page("pages/job_seeker_portal.py")
         else:
             st.rerun()
     st.stop()

@@ -29,7 +29,7 @@ if st.session_state.get("role") != "job_seeker":
     st.error("Access denied. Only job seekers can access this page.")
     if st.button("Return to your portal"):
         if st.session_state.get("role") == "recruiter":
-            st.switch_page("pages/recruiter_portal")
+            st.switch_page("pages/recruiter_portal.py")
         else:
             st.rerun()
     st.stop()
@@ -67,19 +67,32 @@ st.subheader("View Matches")
 if st.button("Load Matches"):
     try:
         res = requests.get(f"{backend_url}/matches/")
-        if res.status_code == 200:
-            data = res.json()["matches"]
-            if not data:
-                st.info("No matches found yet. Try uploading your CV and generating matches.")
-            else:
-                df = pd.DataFrame(data)
-                st.dataframe(df, use_container_width=True)
+
+        if res.status_code != 200:
+            st.error(f"Backend error: {res.text}")
+            st.stop()
+
+        data = res.json()
+
+        # Handle unexpected backend responses
+        if isinstance(data, dict) and "matches" in data:
+            matches = data["matches"]
+        elif isinstance(data, list):
+            matches = data
         else:
-            st.error("Error fetching matches. Please check the backend.")
+            st.warning("Received unexpected response format from backend.")
+            st.json(data)
+            st.stop()
+
+        if not matches:
+            st.info("No matches found yet. Upload a CV and ensure a recruiter has posted jobs.")
+        else:
+            df = pd.DataFrame(matches)
+            st.dataframe(df, use_container_width=True)
+
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
 
-st.markdown("---")
 
 # === Section 3: Top Matches per Resume ===
 st.subheader("Your Top Matches")
@@ -87,20 +100,32 @@ st.subheader("Your Top Matches")
 if st.button("Load Top Matches"):
     try:
         res = requests.get(f"{backend_url}/matches/top/")
-        if res.status_code == 200:
-            data = res.json()["top_matches"]
-            if not data:
-                st.info("No matches found yet. Try generating matches first.")
-            else:
-                st.success("Here are your best job matches!")
-                df_top = pd.DataFrame(data)
-                st.dataframe(df_top, use_container_width=True)
+
+        if res.status_code != 200:
+            st.error(f"Backend error: {res.text}")
+            st.stop()
+
+        data = res.json()
+
+        if isinstance(data, dict) and "top_matches" in data:
+            top = data["top_matches"]
+        elif isinstance(data, list):
+            top = data
         else:
-            st.error(f"Error fetching top matches: {res.text}")
+            st.warning("Unexpected response format from backend.")
+            st.json(data)
+            st.stop()
+
+        if not top:
+            st.info("No top matches yet. Try generating matches first.")
+        else:
+            df_top = pd.DataFrame(top)
+            st.success("Here are your top matches!")
+            st.dataframe(df_top, use_container_width=True)
+
     except requests.exceptions.ConnectionError:
         st.error("Cannot connect to backend. Make sure FastAPI is running.")
-        
-st.markdown("---")
+
 
 # === Logout ===
 if st.button("Logout"):
