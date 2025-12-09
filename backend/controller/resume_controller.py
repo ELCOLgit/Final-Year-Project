@@ -87,3 +87,18 @@ def list_resumes(db: Session = Depends(get_db)):
         }
         for r in resumes
     ]
+# === Get a single resume by ID ===
+@router.get("/{resume_id}")
+def get_resume(resume_id: int, db: Session = Depends(get_db)):
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    return {
+        "id": resume.id,
+        "user_id": resume.user_id,
+        "filename": resume.filename,
+        "text_content": resume.text_content,
+        "upload_date": resume.upload_date
+    }
