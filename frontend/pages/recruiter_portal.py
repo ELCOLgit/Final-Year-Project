@@ -2,6 +2,20 @@ import streamlit as st
 import os
 import requests
 import pandas as pd
+import re
+
+# === Highlighting helper ===
+def highlight_keywords(text, keywords):
+    if not text:
+        return "No text available."
+
+    escaped = [re.escape(k) for k in keywords]
+    if not escaped:
+        return text
+
+    pattern = r"(?i)(" + "|".join(escaped) + ")"
+    return re.sub(pattern, r"<mark style='background-color:#ffeb3b;'>\1</mark>", text)
+
 
 # === Load Styling ===
 css_path = os.path.join(os.path.dirname(__file__), "..", "assets", "styles.css")
@@ -32,7 +46,7 @@ st.markdown("---")
 # =======================================================================
 #  SECTION 1 — JOB POSTING UPLOAD
 # =======================================================================
-st.subheader("📄 Create a New Job Posting")
+st.subheader("Create a New Job Posting")
 
 col1, col2 = st.columns([1.5, 2])
 
@@ -81,9 +95,9 @@ st.markdown("---")
 
 
 # =======================================================================
-#  SECTION 2 — CANDIDATE LIST VIEW + RESUME VIEWER
+#  SECTION 2 — CANDIDATE LIST + RESUME VIEWER
 # =======================================================================
-st.subheader("🧑‍💼 Candidate List")
+st.subheader("Candidate List")
 
 colA, colB = st.columns([1.3, 1.7])
 
@@ -99,15 +113,13 @@ with colA:
                 st.info("No resumes uploaded yet.")
                 selected_resume = None
             else:
-                df_resumes = pd.DataFrame(resumes)
-                df_resumes = df_resumes.rename(columns={
+                df_resumes = pd.DataFrame(resumes).rename(columns={
                     "id": "Resume ID",
                     "filename": "Filename",
                     "upload_date": "Uploaded",
                     "user_id": "User ID"
                 })
 
-                # Dropdown to select resume
                 selected_resume = st.selectbox(
                     "Select a candidate",
                     df_resumes["Resume ID"],
@@ -124,22 +136,24 @@ with colA:
         selected_resume = None
 
 
+# ---------------------- RESUME VIEWER ----------------------
 with colB:
     st.markdown("### Resume Viewer")
 
+    resume_text = None
+
     if selected_resume:
         try:
-            # Get resume full details
             res_text = requests.get(f"{backend_url}/resumes/{selected_resume}")
             if res_text.status_code == 200:
                 resume_data = res_text.json()
+                resume_text = resume_data["text_content"]
 
                 st.markdown(f"**📄 Filename:** {resume_data['filename']}")
-                st.markdown(f"**👤 Uploaded By (User ID):** {resume_data['user_id']}")
+                st.markdown(f"**👤 User ID:** {resume_data['user_id']}")
                 st.markdown("---")
 
-                st.subheader("Extracted Resume Text")
-                st.text_area("", resume_data["text_content"], height=420)
+                st.text_area("Extracted Resume Text", resume_text, height=420)
 
             else:
                 st.error("Error loading resume content.")
@@ -151,9 +165,91 @@ st.markdown("---")
 
 
 # =======================================================================
-#  SECTION 3 — MATCH GENERATION
+#  SECTION 3 — MATCH VIEWER + COMPARISON TOOL
 # =======================================================================
-st.subheader("🔍 AI Match Generation")
+st.markdown("### Match Viewer")
+
+if selected_resume and resume_text:
+    try:
+        match_res = requests.get(
+            f"{backend_url}/matches/by-resume/{selected_resume}",
+            headers=headers
+        )
+
+        if match_res.status_code == 200:
+            match_data = match_res.json()
+
+            if match_data:
+                st.markdown("#### Best Job Matches for This Resume")
+                df_match = pd.DataFrame(match_data)
+                st.dataframe(df_match, use_container_width=True)
+
+                # ---------------- MATCH FILTERS ----------------
+                st.markdown("### Filters")
+
+                threshold = st.slider(
+                    "Minimum Match Score", 0.0, 1.0, 0.0, 0.01
+                )
+                job_titles = ["All Jobs"] + sorted(list(set(m["job_title"] for m in match_data)))
+                selected_title = st.selectbox("Filter by Job Title", job_titles)
+
+                filtered = [
+                    m for m in match_data
+                    if m["score"] >= threshold and
+                       (selected_title == "All Jobs" or m["job_title"] == selected_title)
+                ]
+
+                st.markdown("#### Filtered Matches")
+                st.dataframe(pd.DataFrame(filtered), use_container_width=True)
+
+                # ---------------- COMPARISON VIEW ----------------
+                if filtered:
+                    st.markdown("### Resume vs Job Description Comparison")
+
+                    selected_match = st.selectbox(
+                        "Select a match to compare",
+                        filtered,
+                        format_func=lambda x: f"{x['job_title']} (Score {x['score']})"
+                    )
+
+                    # Load job description
+                    job_id = selected_match["job_id"]
+                    job_info_res = requests.get(f"{backend_url}/jobs/{job_id}")
+                    job_info = job_info_res.json()
+
+                    keywords = ["python", "sql", "cloud", "react", "machine learning",
+                                "nlp", "analysis", "backend", "developer"]
+
+                    colX, colY = st.columns(2)
+
+                    with colX:
+                        st.markdown("#### Resume (Highlighted)")
+                        highlighted_resume = highlight_keywords(resume_text, keywords)
+                        st.markdown(f"<div style='white-space:pre-wrap;'>{highlighted_resume}</div>",
+                                    unsafe_allow_html=True)
+
+                    with colY:
+                        st.markdown(f"#### Job Description: {job_info['title']}")
+                        highlighted_job = highlight_keywords(job_info["description"], keywords)
+                        st.markdown(f"<div style='white-space:pre-wrap;'>{highlighted_job}</div>",
+                                    unsafe_allow_html=True)
+
+            else:
+                st.info("No matches generated for this resume yet.")
+
+        else:
+            st.error("Error loading match data.")
+
+    except:
+        st.error("Backend unavailable.")
+
+st.markdown("---")
+
+
+# =======================================================================
+#  SECTION 4 — MATCH GENERATION
+# =======================================================================
+st.subheader("AI Match Generation")
 
 st.markdown("Click below to analyze all candidate resumes and generate matching scores.")
 
@@ -165,26 +261,14 @@ if st.button("Generate & View Matches", use_container_width=True):
 
             st.success("Match generation completed!")
 
-            summary = {
-                "Processed Resumes": result.get("processed_resumes"),
-                "Processed Jobs": result.get("processed_jobs"),
-                "New Matches": result.get("new_matches"),
-                "Updated Matches": result.get("updated_matches"),
-                "Removed Low Matches": result.get("removed_low_matches"),
-                "Threshold": result.get("threshold")
-            }
-
-            df_summary = pd.DataFrame(summary.items(), columns=["Metric", "Value"])
+            df_summary = pd.DataFrame(result.items(), columns=["Metric", "Value"])
             st.table(df_summary)
 
-            with st.expander("🔎 Raw Match Generation Output (Debug)"):
-                st.json(result)
-
         else:
-            st.error(f"Error generating matches: {res.text}")
+            st.error(res.text)
 
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to backend.")
+    except:
+        st.error("Backend unavailable.")
 
 st.markdown("---")
 
@@ -195,7 +279,6 @@ st.markdown("---")
 if st.button("Logout"):
     st.session_state.clear()
     st.rerun()
-
 
 st.markdown("""
 <div style='margin-top:2rem; text-align:center; font-size:0.9rem; color:#555;'>

@@ -68,6 +68,29 @@ def get_top_matches(
 
     return {"top_matches": results}
 
+@router.get("/by-resume/{resume_id}")
+def get_matches_for_resume(
+    resume_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    matches = (
+        db.query(Match)
+        .filter(Match.resume_id == resume_id)
+        .order_by(Match.match_score.desc())
+        .all()
+    )
+
+    return [
+        {
+            "job_id": m.job_posting.id,
+            "job_title": m.job_posting.title,
+            "score": round(m.match_score, 3),
+            "generated_at": m.generated_at
+        }
+        for m in matches
+    ]
+
 
 @router.get("/debug/")
 def debug_matches(db: Session = Depends(get_db)):
