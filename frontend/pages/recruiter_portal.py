@@ -35,7 +35,7 @@ st.markdown(
     "<h5 style='color:#001F3F;'>Manage job postings and view matches for applicants.</h5>",
     unsafe_allow_html=True
 )
-st.write("DEBUG: token =", st.session_state.get("token"))
+
 
 # === Upload Job Posting ===
 st.markdown("---")
