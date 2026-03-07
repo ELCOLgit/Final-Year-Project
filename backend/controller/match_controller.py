@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends
+import json
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models.match_model import Match
+from backend.models.job_postings_model import JobPosting
 from backend.models.resume_model import Resume
 from backend.models.user_model import User
 from backend.utils.dependencies import get_current_user
+from backend.vectorStore.faiss_index import search as faiss_search
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
 
@@ -105,3 +109,58 @@ def debug_matches(db: Session = Depends(get_db)):
         }
         for m in matches
     ]
+
+
+@router.get("/search/{resume_id}")
+def search_matches_for_resume(
+    resume_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # load the resume for this user
+    resume = (
+        db.query(Resume)
+        .filter(Resume.id == resume_id, Resume.user_id == current_user.id)
+        .first()
+    )
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    # parse the embedding from json text into a python list
+    try:
+        resume_embedding = json.loads(resume.embedding or "[]")
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Resume embedding is invalid") from exc
+
+    # stop early if there is no embedding stored yet
+    if not resume_embedding:
+        raise HTTPException(status_code=400, detail="Resume embedding is empty")
+
+    # search faiss using the resume embedding
+    faiss_results = faiss_search(resume_embedding, k=5)
+
+    # build final match list with score + job posting data
+    matches = []
+    for result in faiss_results:
+        metadata = result.get("metadata") or {}
+
+        # get job id from metadata using common key names
+        job_id = metadata.get("job_id") or metadata.get("id") or metadata.get("job_posting_id")
+        if job_id is None:
+            continue
+
+        job = db.query(JobPosting).filter(JobPosting.id == job_id).first()
+        if not job:
+            continue
+
+        matches.append({
+            "job_id": job.id,
+            "job_title": job.title,
+            "score": float(result.get("score", 0.0)),
+            "metadata": metadata,
+        })
+
+    return {
+        "resume_id": resume.id,
+        "matches": matches,
+    }
