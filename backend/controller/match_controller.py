@@ -117,7 +117,7 @@ def search_matches_for_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # load the resume for this user
+    # get the resume from the database using the id
     resume = (
         db.query(Resume)
         .filter(Resume.id == resume_id, Resume.user_id == current_user.id)
@@ -126,25 +126,25 @@ def search_matches_for_resume(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    # parse the embedding from json text into a python list
+    # load the stored embedding (it is saved as json text)
     try:
         resume_embedding = json.loads(resume.embedding or "[]")
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=400, detail="Resume embedding is invalid") from exc
 
-    # stop early if there is no embedding stored yet
+    # stop here if no embedding was saved yet
     if not resume_embedding:
         raise HTTPException(status_code=400, detail="Resume embedding is empty")
 
-    # search faiss using the resume embedding
+    # run faiss search using the resume embedding
     faiss_results = faiss_search(resume_embedding, k=5)
 
-    # build final match list with score + job posting data
+    # build a clean list of job matches from the faiss results
     matches = []
     for result in faiss_results:
         metadata = result.get("metadata") or {}
 
-        # get job id from metadata using common key names
+        # read job id from metadata so we can load job details
         job_id = metadata.get("job_id") or metadata.get("id") or metadata.get("job_posting_id")
         if job_id is None:
             continue
@@ -153,14 +153,15 @@ def search_matches_for_resume(
         if not job:
             continue
 
+        # keep only first ~200 chars so response stays short
+        description_preview = (job.description or "")[:200]
+
         matches.append({
             "job_id": job.id,
-            "job_title": job.title,
-            "score": float(result.get("score", 0.0)),
-            "metadata": metadata,
+            "title": job.title,
+            "similarity_score": float(result.get("score", 0.0)),
+            "description_preview": description_preview,
         })
 
-    return {
-        "resume_id": resume.id,
-        "matches": matches,
-    }
+    # return the matches list directly
+    return matches

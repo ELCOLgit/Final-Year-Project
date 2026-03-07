@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, Form
+import json
+
+from fastapi import APIRouter, Depends, Form, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models.job_postings_model import JobPosting
 from backend.models.user_model import User, UserRole
 from datetime import datetime
 from backend.utils.dependencies import require_recruiter
-from fastapi import Depends
 from fastapi import Path
+from backend.nlp.preprocessing import preprocess_text
+from backend.utils.embedding_utils import generate_embedding
+from backend.vectorStore.faiss_index import add_vector
 from urllib.parse import unquote
 
 router = APIRouter(
@@ -29,7 +33,7 @@ async def upload_job_posting(
     description: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    # Create or get demo recruiter user
+    # create or get demo recruiter user
     recruiter = db.query(User).filter(User.id == 2).first()
     if not recruiter:
         recruiter = User(
@@ -42,11 +46,17 @@ async def upload_job_posting(
         db.commit()
         db.refresh(recruiter)
 
-    # Add the job posting
+    # preprocess the description text before embedding
+    cleaned_description = preprocess_text(description)
+
+    # create embedding from the cleaned description
+    embedding = generate_embedding(cleaned_description)
+
+    # add the job posting first so we can get a real job id
     job = JobPosting(
         recruiter_id=recruiter.id,
         title=title,
-        description=description,
+        description=cleaned_description,
         embedding="[]",
         date_posted=datetime.utcnow()
     )
@@ -55,11 +65,19 @@ async def upload_job_posting(
     db.commit()
     db.refresh(job)
 
+    # add embedding to faiss and link it with this job id
+    add_vector(embedding, {"job_id": job.id})
+
+    # store embedding in database as a json list string
+    job.embedding = json.dumps(embedding)
+    db.commit()
+    db.refresh(job)
+
     return {
         "message": "Job posting uploaded successfully",
         "job_id": job.id,
         "title": job.title,
-        "description_preview": description[:200] + "..." if len(description) > 200 else description
+        "description_preview": job.description[:200] + "..." if len(job.description) > 200 else job.description
     }
 
 # === Optional: View all job postings ===
