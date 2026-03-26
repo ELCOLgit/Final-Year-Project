@@ -171,11 +171,13 @@ if search_resume_id and search_matches is not None:
             if st.button("compare cv text vs job description", key=f"compare_btn_{i}"):
                 st.session_state["compare_job_id"] = job_id
                 st.session_state["compare_job_title"] = title
+                st.session_state["compare_match_data"] = match
 
 
 # show compare panel when a compare button was clicked
 compare_job_id = st.session_state.get("compare_job_id")
 compare_job_title = st.session_state.get("compare_job_title", "selected job")
+compare_match_data = st.session_state.get("compare_match_data", {})
 
 if compare_job_id and search_resume_id:
     resume_res = requests.get(f"{backend_url}/resumes/{search_resume_id}", headers=headers)
@@ -184,6 +186,8 @@ if compare_job_id and search_resume_id:
     if resume_res.status_code == 200 and job_res.status_code == 200:
         resume_text = resume_res.json().get("text_content", "")
         job_text = job_res.json().get("description", "")
+        missing_skills = compare_match_data.get("missing_skills", [])
+        suggestions = compare_match_data.get("suggestions", [])
 
         # simple keyword list for highlighting overlap
         keywords = [
@@ -218,6 +222,45 @@ if compare_job_id and search_resume_id:
                 ),
                 unsafe_allow_html=True,
             )
+
+        st.markdown("### missing skills")
+
+        # show missing skills in a simple grey rounded box
+        if missing_skills:
+            missing_skills_html = "".join([f"<li>{skill}</li>" for skill in missing_skills])
+            st.markdown(
+                (
+                    "<div style='border:1px solid #d9d9d9; border-radius:10px; "
+                    "padding:14px; background:#f3f3f3;'>"
+                    f"<ul style='margin:0; padding-left:20px;'>{missing_skills_html}</ul>"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                (
+                    "<div style='border:1px solid #d9d9d9; border-radius:10px; "
+                    "padding:14px; background:#f3f3f3;'>"
+                    "no missing skills found"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("### resume improvement suggestions")
+
+        # show suggestions below the comparison columns
+        suggestions_html = "".join([f"<li>{suggestion}</li>" for suggestion in suggestions])
+        st.markdown(
+            (
+                "<div style='border:1px solid #d9d9d9; border-radius:10px; "
+                "padding:14px; background:#f3f3f3;'>"
+                f"<ul style='margin:0; padding-left:20px;'>{suggestions_html}</ul>"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
     else:
         st.error("Could not load resume/job text for comparison.")
 
@@ -227,5 +270,6 @@ st.markdown("---")
 
 # logout button
 if st.button("Logout"):
+    # clear login data and send user back to the home page
     st.session_state.clear()
-    st.rerun()
+    st.switch_page("pages/home.py")

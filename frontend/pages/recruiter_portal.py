@@ -1,287 +1,445 @@
-import streamlit as st
 import os
-import requests
-import pandas as pd
 import re
 
-# === Highlighting helper ===
+import requests
+import streamlit as st
+
+
 def highlight_keywords(text, keywords):
     if not text:
         return "No text available."
 
-    escaped = [re.escape(k) for k in keywords]
+    escaped = [re.escape(keyword) for keyword in keywords]
     if not escaped:
         return text
 
     pattern = r"(?i)(" + "|".join(escaped) + ")"
-    return re.sub(pattern, r"<mark style='background-color:#ffeb3b;'>\1</mark>", text)
+    return re.sub(pattern, r"<mark style='background-color:#fde68a;'>\1</mark>", text)
 
 
-# === Load Styling ===
+def fetch_json(url, headers=None, timeout=20):
+    try:
+        response = requests.get(url, headers=headers, timeout=timeout)
+        if response.status_code == 200:
+            return response.json(), None
+        return None, response.text
+    except requests.RequestException:
+        return None, "backend unavailable"
+
+
+def summary_card(title, value, text):
+    return f"""
+    <div style="
+        background:#f7f7f7;
+        border:1px solid #eee;
+        border-radius:12px;
+        padding:1.5rem;
+        min-height:150px;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        text-align:left;
+    ">
+        <div style="
+            font-size:0.78rem;
+            text-transform:uppercase;
+            letter-spacing:0.08em;
+            color:#6b7280;
+            margin-bottom:0.6rem;
+        ">{title}</div>
+        <div style="
+            font-size:2rem;
+            font-weight:700;
+            color:#111827;
+            margin-bottom:0.5rem;
+            line-height:1.1;
+        ">{value}</div>
+        <div style="
+            font-size:0.9rem;
+            color:#6b7280;
+            line-height:1.4;
+        ">{text}</div>
+    </div>
+    """
+
+
+def ranking_card(candidate, rank_number):
+    score = float(candidate.get("score", 0.0))
+    skill_text = ", ".join(candidate.get("skills", [])) or "no skills found"
+    return f"""
+    <div style="
+        background:#ffffff;
+        border-radius:10px;
+        padding:1rem;
+        margin-bottom:1rem;
+        border:1px solid #e5e7eb;
+        text-align:left;
+    ">
+        <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start;">
+            <div style="text-align:left;">
+                <div style="
+                    font-size:0.8rem;
+                    color:#6b7280;
+                    margin-bottom:0.4rem;
+                    text-transform:uppercase;
+                    letter-spacing:0.06em;
+                ">rank {rank_number}</div>
+                <div style="font-size:1rem; font-weight:700; color:#111827; margin-bottom:0.4rem;">
+                    {candidate["filename"]}
+                </div>
+                <div style="font-size:0.9rem; color:#6b7280;">
+                    {skill_text}
+                </div>
+            </div>
+            <div style="
+                background:#dbeafe;
+                color:#1d4ed8;
+                border-radius:999px;
+                padding:0.35rem 0.7rem;
+                font-size:0.8rem;
+                white-space:nowrap;
+            ">
+                score {score:.3f}
+            </div>
+        </div>
+    </div>
+    """
+
+
+def get_unique_rankings(candidates):
+    # keep the first result for each resume so duplicates do not show twice
+    unique_candidates = []
+    seen_resume_ids = set()
+
+    for candidate in candidates:
+        resume_id = candidate.get("resume_id")
+        if resume_id in seen_resume_ids:
+            continue
+
+        seen_resume_ids.add(resume_id)
+        unique_candidates.append(candidate)
+
+    return unique_candidates
+
+
+st.set_page_config(page_title="Recruiter Portal", page_icon="briefcase", layout="wide")
+
+# load shared css file
 css_path = os.path.join(os.path.dirname(__file__), "..", "assets", "styles.css")
 with open(css_path) as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# === Page Config ===
-st.set_page_config(page_title="Recruiter Portal", page_icon="💼", layout="wide")
+st.markdown(
+    """
+    <style>
+    .section-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #111827;
+        text-align: left;
+        margin-bottom: 0.4rem;
+    }
+    .section-subtitle {
+        font-size: 0.95rem;
+        color: #6b7280;
+        text-align: left;
+        margin-bottom: 1rem;
+        line-height: 1.5;
+    }
+    .field-gap {
+        height: 0.75rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 backend_url = "http://127.0.0.1:8000"
 
-# === Auth Check ===
+# block page if user is not logged in
 if "token" not in st.session_state or st.session_state["token"] is None:
     st.warning("Please log in first.")
     st.stop()
 
+# block page if logged user is not a recruiter
 if st.session_state.get("role") != "recruiter":
     st.error("Access denied.")
     st.stop()
 
 headers = {"Authorization": f"Bearer {st.session_state['token']}"}
 
-# === HEADER ===
-st.title("Recruiter Dashboard")
-st.markdown("<h5 style='color:#001F3F;'>Manage job postings and analyze AI-generated candidate matches.</h5>", unsafe_allow_html=True)
-st.markdown("---")
+if "viewer_resume_id" not in st.session_state:
+    st.session_state["viewer_resume_id"] = None
 
+# load page data
+jobs, jobs_error = fetch_json(f"{backend_url}/jobs/")
+resumes, resumes_error = fetch_json(f"{backend_url}/resumes/")
 
-# =======================================================================
-#  SECTION 1 — JOB POSTING UPLOAD
-# =======================================================================
-st.subheader("Create a New Job Posting")
+jobs = jobs or []
+resumes = resumes or []
 
-col1, col2 = st.columns([1.5, 2])
+latest_job_title = jobs[0]["title"] if jobs else "none yet"
+selected_resume_data = None
+candidate_rankings = []
 
-with col1:
-    st.markdown("### Job Details")
+header_left, header_right = st.columns([12, 1])
+with header_left:
+    st.title("Recruiter Dashboard")
+with header_right:
+    # keep the same plain button style as the job seeker page
+    if st.button("refresh", help="refresh data"):
+        st.rerun()
 
-    with st.form("job_form"):
-        title = st.text_input("Job Title", placeholder="e.g., Junior Backend Developer")
-        description = st.text_area("Job Description", height=180,
-                                   placeholder="Describe the skills, responsibilities, and qualifications...")
+with st.container():
+    # section 1: top summary cards
+    summary_col_1, summary_col_2, summary_col_3 = st.columns(3)
 
-        submit_job = st.form_submit_button("Upload Job Posting")
-
-        if submit_job:
-            if title and description:
-                res = requests.post(
-                    f"{backend_url}/jobs/upload/",
-                    data={"title": title, "description": description},
-                    headers=headers
-                )
-                if res.status_code == 200:
-                    st.success("Job posted successfully!")
-                else:
-                    st.error(res.text)
-            else:
-                st.warning("Please fill in all fields.")
-
-with col2:
-    st.markdown("### Recently Added Jobs")
-
-    try:
-        job_res = requests.get(f"{backend_url}/jobs/")
-        if job_res.status_code == 200:
-            jobs = job_res.json()
-            if jobs:
-                df_jobs = pd.DataFrame(jobs)
-                st.dataframe(df_jobs, height=260, use_container_width=True)
-            else:
-                st.info("No job postings available.")
-        else:
-            st.error(job_res.text)
-    except:
-        st.error("Backend unavailable.")
-
-st.markdown("---")
-
-
-# =======================================================================
-#  SECTION 2 — CANDIDATE LIST + RESUME VIEWER
-# =======================================================================
-st.subheader("Candidate List")
-
-colA, colB = st.columns([1.3, 1.7])
-
-with colA:
-    st.markdown("### All Uploaded Candidate Resumes")
-
-    try:
-        res = requests.get(f"{backend_url}/resumes/")
-        if res.status_code == 200:
-            resumes = res.json()
-
-            if not resumes:
-                st.info("No resumes uploaded yet.")
-                selected_resume = None
-            else:
-                df_resumes = pd.DataFrame(resumes).rename(columns={
-                    "id": "Resume ID",
-                    "filename": "Filename",
-                    "upload_date": "Uploaded",
-                    "user_id": "User ID"
-                })
-
-                selected_resume = st.selectbox(
-                    "Select a candidate",
-                    df_resumes["Resume ID"],
-                    format_func=lambda x: f"Resume {x} — {df_resumes.loc[df_resumes['Resume ID'] == x, 'Filename'].values[0]}"
-                )
-
-                st.dataframe(df_resumes, height=260, use_container_width=True)
-
-        else:
-            st.error("Error loading resumes.")
-
-    except:
-        st.error("Backend unavailable.")
-        selected_resume = None
-
-
-# ---------------------- RESUME VIEWER ----------------------
-with colB:
-    st.markdown("### Resume Viewer")
-
-    resume_text = None
-
-    if selected_resume:
-        try:
-            res_text = requests.get(f"{backend_url}/resumes/{selected_resume}")
-            if res_text.status_code == 200:
-                resume_data = res_text.json()
-                resume_text = resume_data["text_content"]
-
-                st.markdown(f"**📄 Filename:** {resume_data['filename']}")
-                st.markdown(f"**👤 User ID:** {resume_data['user_id']}")
-                st.markdown("---")
-
-                st.text_area("Extracted Resume Text", resume_text, height=420)
-
-            else:
-                st.error("Error loading resume content.")
-
-        except:
-            st.error("Backend unavailable.")
-
-st.markdown("---")
-
-
-# =======================================================================
-#  SECTION 3 — MATCH VIEWER + COMPARISON TOOL
-# =======================================================================
-st.markdown("### Match Viewer")
-
-if selected_resume and resume_text:
-    try:
-        match_res = requests.get(
-            f"{backend_url}/matches/by-resume/{selected_resume}",
-            headers=headers
+    with summary_col_1:
+        st.markdown(
+            summary_card("job postings", len(jobs), "roles currently available for ranking"),
+            unsafe_allow_html=True,
         )
 
-        if match_res.status_code == 200:
-            match_data = match_res.json()
+    with summary_col_2:
+        st.markdown(
+            summary_card("candidate cvs", len(resumes), "uploaded resumes in the system"),
+            unsafe_allow_html=True,
+        )
 
-            if match_data:
-                st.markdown("#### Best Job Matches for This Resume")
-                df_match = pd.DataFrame(match_data)
-                st.dataframe(df_match, use_container_width=True)
+    with summary_col_3:
+        st.markdown(
+            summary_card("latest role", latest_job_title, "most recent job posting"),
+            unsafe_allow_html=True,
+        )
 
-                # ---------------- MATCH FILTERS ----------------
-                st.markdown("### Filters")
+st.markdown("---")
 
-                threshold = st.slider(
-                    "Minimum Match Score", 0.0, 1.0, 0.0, 0.01
-                )
-                job_titles = ["All Jobs"] + sorted(list(set(m["job_title"] for m in match_data)))
-                selected_title = st.selectbox("Filter by Job Title", job_titles)
+with st.container():
+    # section 2: main workspace
+    workspace_left, workspace_right = st.columns(2, gap="large")
 
-                filtered = [
-                    m for m in match_data
-                    if m["score"] >= threshold and
-                       (selected_title == "All Jobs" or m["job_title"] == selected_title)
+    with workspace_left:
+        st.markdown("<div class='section-title'>Job Posting</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-subtitle'>Add a new role and reload the dashboard when you are ready.</div>",
+            unsafe_allow_html=True,
+        )
+
+        with st.form("job_posting_form"):
+            title = st.text_input("Job title", placeholder="e.g. junior backend developer")
+            description = st.text_area(
+                "Job description",
+                height=220,
+                placeholder="add the responsibilities, skills, and requirements",
+            )
+            submit_job = st.form_submit_button("Upload job posting")
+
+            if submit_job:
+                if not title or not description:
+                    st.warning("please fill in the job title and description")
+                else:
+                    try:
+                        response = requests.post(
+                            f"{backend_url}/jobs/upload/",
+                            headers=headers,
+                            data={"title": title, "description": description},
+                            timeout=30,
+                        )
+                        if response.status_code == 200:
+                            st.success("job posting uploaded successfully")
+                            st.rerun()
+                        else:
+                            st.error(response.text)
+                    except requests.RequestException:
+                        st.error("backend unavailable")
+
+    with workspace_right:
+        st.markdown("<div class='section-title'>Candidate Ranking</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-subtitle'>Choose a job and click a candidate to open the cv viewer.</div>",
+            unsafe_allow_html=True,
+        )
+
+        if jobs_error:
+            st.error(jobs_error)
+        elif not jobs:
+            st.info("upload a job posting first to see candidate rankings")
+        else:
+            ranking_job_id = st.selectbox(
+                "Selected job",
+                [job["id"] for job in jobs],
+                format_func=lambda value: next(job["title"] for job in jobs if job["id"] == value),
+                key="ranking_job_id",
+            )
+
+            ranking_data, ranking_error = fetch_json(
+                f"{backend_url}/matches/by-job/{ranking_job_id}",
+                headers=headers,
+            )
+            candidate_rankings = get_unique_rankings(ranking_data or [])
+
+            if ranking_error:
+                st.error(ranking_error)
+            elif not candidate_rankings:
+                st.info("no ranked candidates yet.")
+            else:
+                ranking_resume_ids = [candidate["resume_id"] for candidate in candidate_rankings]
+                if st.session_state["viewer_resume_id"] not in ranking_resume_ids:
+                    st.session_state["viewer_resume_id"] = ranking_resume_ids[0]
+
+                for rank_number, candidate in enumerate(candidate_rankings[:5], start=1):
+                    # show each ranked candidate as one clean card
+                    st.markdown(ranking_card(candidate, rank_number), unsafe_allow_html=True)
+
+st.markdown("---")
+
+with st.container():
+    # section 3: recruiter ai + cv viewer
+    bottom_col_left, bottom_col_right = st.columns(2, gap="large")
+
+    with bottom_col_left:
+        st.markdown("<div class='section-title'>Recruiter AI</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-subtitle'>Ask simple questions about a selected cv or job.</div>",
+            unsafe_allow_html=True,
+        )
+
+        selected_resume_id = None
+        selected_job_id = None
+
+        # keep the ai inputs in one clean vertical layout
+        if resumes:
+            selected_resume_id = st.selectbox(
+                "Candidate context",
+                [None] + [resume["id"] for resume in resumes],
+                format_func=lambda value: "no candidate selected" if value is None else next(
+                    resume["filename"] for resume in resumes if resume["id"] == value
+                ),
+            )
+
+        st.markdown("<div class='field-gap'></div>", unsafe_allow_html=True)
+
+        if jobs:
+            selected_job_id = st.selectbox(
+                "Job context",
+                [None] + [job["id"] for job in jobs],
+                format_func=lambda value: "no job selected" if value is None else next(
+                    job["title"] for job in jobs if job["id"] == value
+                ),
+            )
+
+        st.markdown("<div class='field-gap'></div>", unsafe_allow_html=True)
+
+        recruiter_question = st.text_input(
+            "Ask a question",
+            placeholder="what are the skills in this cv?",
+        )
+
+        st.markdown("<div class='field-gap'></div>", unsafe_allow_html=True)
+
+        if st.button("Ask recruiter AI", use_container_width=True):
+            if not recruiter_question.strip():
+                st.warning("please enter a question first")
+            else:
+                try:
+                    response = requests.post(
+                        f"{backend_url}/recruiter-ai/query/",
+                        headers=headers,
+                        json={
+                            "question": recruiter_question,
+                            "resume_id": selected_resume_id,
+                            "job_id": selected_job_id,
+                        },
+                        timeout=30,
+                    )
+                    if response.status_code == 200:
+                        st.session_state["recruiter_ai_answer"] = response.json().get("answer", "")
+                    else:
+                        st.error(response.text)
+                except requests.RequestException:
+                    st.error("backend unavailable")
+
+        if st.session_state.get("recruiter_ai_answer"):
+            st.markdown(
+                (
+                    "<div style='background:#ffffff; border-radius:10px; padding:1rem; "
+                    "border:1px solid #e5e7eb; text-align:left;'>"
+                    f"{st.session_state['recruiter_ai_answer']}"
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+    with bottom_col_right:
+        st.markdown("<div class='section-title'>CV Viewer</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-subtitle'>Review the selected candidate cv with highlighted keywords.</div>",
+            unsafe_allow_html=True,
+        )
+
+        if resumes_error:
+            st.error(resumes_error)
+        elif not resumes:
+            st.info("no resumes uploaded yet")
+        else:
+            resume_ids = [resume["id"] for resume in resumes]
+            if st.session_state["viewer_resume_id"] not in resume_ids:
+                st.session_state["viewer_resume_id"] = resume_ids[0]
+
+            viewer_resume_id = st.selectbox(
+                "Selected candidate",
+                resume_ids,
+                format_func=lambda value: next(resume["filename"] for resume in resumes if resume["id"] == value),
+                key="viewer_resume_id",
+            )
+
+            selected_resume_data, resume_error = fetch_json(f"{backend_url}/resumes/{viewer_resume_id}")
+
+            if resume_error:
+                st.error(resume_error)
+            elif selected_resume_data:
+                keywords = [
+                    "python",
+                    "sql",
+                    "fastapi",
+                    "excel",
+                    "cloud",
+                    "react",
+                    "machine learning",
+                    "analysis",
+                    "developer",
+                    "backend",
                 ]
 
-                st.markdown("#### Filtered Matches")
-                st.dataframe(pd.DataFrame(filtered), use_container_width=True)
+                # show resume file details first
+                st.markdown(
+                    (
+                        "<div style='background:#ffffff; border-radius:10px; padding:1rem; "
+                        "border:1px solid #e5e7eb; text-align:left; margin-bottom:1rem;'>"
+                        f"<strong>filename:</strong> {selected_resume_data['filename']}<br>"
+                        f"<strong>user id:</strong> {selected_resume_data['user_id']}"
+                        "</div>"
+                    ),
+                    unsafe_allow_html=True,
+                )
 
-                # ---------------- COMPARISON VIEW ----------------
-                if filtered:
-                    st.markdown("### Resume vs Job Description Comparison")
+                highlighted_resume = highlight_keywords(selected_resume_data.get("text_content", ""), keywords)
 
-                    selected_match = st.selectbox(
-                        "Select a match to compare",
-                        filtered,
-                        format_func=lambda x: f"{x['job_title']} (Score {x['score']})"
-                    )
-
-                    # Load job description
-                    job_id = selected_match["job_id"]
-                    job_info_res = requests.get(f"{backend_url}/jobs/{job_id}")
-                    job_info = job_info_res.json()
-
-                    keywords = ["python", "sql", "cloud", "react", "machine learning",
-                                "nlp", "analysis", "backend", "developer"]
-
-                    colX, colY = st.columns(2)
-
-                    with colX:
-                        st.markdown("#### Resume (Highlighted)")
-                        highlighted_resume = highlight_keywords(resume_text, keywords)
-                        st.markdown(f"<div style='white-space:pre-wrap;'>{highlighted_resume}</div>",
-                                    unsafe_allow_html=True)
-
-                    with colY:
-                        st.markdown(f"#### Job Description: {job_info['title']}")
-                        highlighted_job = highlight_keywords(job_info["description"], keywords)
-                        st.markdown(f"<div style='white-space:pre-wrap;'>{highlighted_job}</div>",
-                                    unsafe_allow_html=True)
-
-            else:
-                st.info("No matches generated for this resume yet.")
-
-        else:
-            st.error("Error loading match data.")
-
-    except:
-        st.error("Backend unavailable.")
+                # keep the resume text scrollable and easy to read
+                st.markdown(
+                    (
+                        "<div style='max-height:400px; overflow-y:auto; background:#ffffff; border-radius:10px; "
+                        "padding:1rem; border:1px solid #e5e7eb; white-space:pre-wrap; text-align:left;'>"
+                        f"{highlighted_resume}"
+                        "</div>"
+                    ),
+                    unsafe_allow_html=True,
+                )
 
 st.markdown("---")
 
-
-# =======================================================================
-#  SECTION 4 — MATCH GENERATION
-# =======================================================================
-st.subheader("AI Match Generation")
-
-st.markdown("Click below to analyze all candidate resumes and generate matching scores.")
-
-if st.button("Generate & View Matches", use_container_width=True):
-    try:
-        res = requests.post(f"{backend_url}/generate/matches/", headers=headers)
-        if res.status_code == 200:
-            result = res.json()
-
-            st.success("Match generation completed!")
-
-            df_summary = pd.DataFrame(result.items(), columns=["Metric", "Value"])
-            st.table(df_summary)
-
-        else:
-            st.error(res.text)
-
-    except:
-        st.error("Backend unavailable.")
-
-st.markdown("---")
-
-
-# =======================================================================
-#  LOGOUT
-# =======================================================================
+# logout button
 if st.button("Logout"):
+    # clear login data and send user back to the home page
     st.session_state.clear()
-    st.rerun()
-
-st.markdown("""
-<div style='margin-top:2rem; text-align:center; font-size:0.9rem; color:#555;'>
-<strong>Accessibility:</strong> Fully keyboard navigable. High-contrast mode supported.
-</div>
-""", unsafe_allow_html=True)
+    st.switch_page("pages/home.py")

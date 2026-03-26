@@ -18,7 +18,7 @@ router = APIRouter(
     tags=["Job Postings"]
 )
 
-# Dependency: get DB session
+# dependency: get db session
 def get_db():
     db = SessionLocal()
     try:
@@ -26,7 +26,7 @@ def get_db():
     finally:
         db.close()
 
-# === Upload job posting (for recruiters) ===
+# upload job posting for recruiters
 @router.post("/upload/", dependencies=[Depends(require_recruiter)])
 async def upload_job_posting(
     title: str = Form(...),
@@ -46,18 +46,19 @@ async def upload_job_posting(
         db.commit()
         db.refresh(recruiter)
 
-    # preprocess the description text before embedding
+    # preprocess the job description first
     cleaned_description = preprocess_text(description)
 
-    # create embedding from the cleaned description
+    # create the embedding from the cleaned text
     embedding = generate_embedding(cleaned_description)
+    embedding_json = json.dumps(embedding)
 
-    # add the job posting first so we can get a real job id
+    # save the job posting with the embedding stored as json
     job = JobPosting(
         recruiter_id=recruiter.id,
         title=title,
         description=cleaned_description,
-        embedding="[]",
+        embedding=embedding_json,
         date_posted=datetime.utcnow()
     )
 
@@ -65,13 +66,8 @@ async def upload_job_posting(
     db.commit()
     db.refresh(job)
 
-    # add embedding to faiss and link it with this job id
+    # add the saved job embedding into faiss using the job id
     add_vector(embedding, {"job_id": job.id})
-
-    # store embedding in database as a json list string
-    job.embedding = json.dumps(embedding)
-    db.commit()
-    db.refresh(job)
 
     return {
         "message": "Job posting uploaded successfully",
@@ -80,7 +76,7 @@ async def upload_job_posting(
         "description_preview": job.description[:200] + "..." if len(job.description) > 200 else job.description
     }
 
-# === Optional: View all job postings ===
+# view all job postings
 @router.get("/")
 def list_job_postings(db: Session = Depends(get_db)):
     jobs = db.query(JobPosting).all()

@@ -1,6 +1,8 @@
 import re
 from typing import List
 
+from backend.nlp.skills_extractor import extract_skills_from_text
+
 
 def preprocess_text(text: str) -> str:
     # make the whole text lowercase first
@@ -16,8 +18,8 @@ def preprocess_text(text: str) -> str:
 
 
 def extract_skills(text: str) -> List[str]:
-    # placeholder for skills extraction later
-    return []
+    # use the simple keyword matcher from the skills extractor
+    return extract_skills_from_text(text)
 
 
 def extract_experience(text: str) -> List[str]:
