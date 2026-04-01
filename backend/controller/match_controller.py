@@ -9,6 +9,7 @@ from backend.models.resume_model import Resume
 from backend.models.user_model import User
 from backend.nlp.improvement_suggestions import generate_suggestions
 from backend.nlp.skills_extractor import compare_skills, extract_skills_from_text
+from backend.services.cvService import generate_match_explanation, multi_step_match_analysis
 from backend.utils.dependencies import get_current_user, require_recruiter
 from backend.vectorStore.faiss_index import search as faiss_search
 
@@ -186,22 +187,36 @@ def search_matches_for_resume(
         if not job:
             continue
 
+        # get the saved match row if it already exists in the database
+        saved_match = (
+            db.query(Match)
+            .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
+            .first()
+        )
+
         # read job text and metadata so we can build a richer response
         job_text = job.description or ""
         job_skills = extract_skills_from_text(job_text)
         missing_skills = compare_skills(cv_skills, job_skills)
         suggestions = generate_suggestions(cv_text, job_text, missing_skills)
+        analysis = multi_step_match_analysis(cv_text, job_text)
+        explanation = generate_match_explanation(cv_text, job_text)
 
         # keep only first ~200 chars so response stays short
         description_preview = job_text[:200]
 
         matches.append({
+            "id": saved_match.id if saved_match else None,
+            "score": analysis.get("score", 0.0),
+            "matching_skills": analysis.get("matching_skills", []),
+            "missing_skills": analysis.get("missing_skills", []),
+            "explanation": explanation,
             "job_id": job.id,
             "title": job.title,
             "similarity_score": float(result.get("score", 0.0)),
             "description_preview": description_preview,
             "job_metadata": metadata,
-            "missing_skills": missing_skills,
+            # keep the original fields so the current flow does not change
             "suggestions": suggestions,
         })
 

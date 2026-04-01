@@ -8,7 +8,9 @@ from backend.database import SessionLocal
 from backend.models.job_postings_model import JobPosting
 from backend.models.match_model import Match
 from backend.models.resume_model import Resume
+from backend.nlp.improvement_suggestions import generate_suggestions
 from backend.nlp.skills_extractor import extract_skills_from_text
+from backend.services.cvService import detect_intent, generate_response
 from backend.utils.dependencies import require_recruiter
 
 router = APIRouter(prefix="/recruiter-ai", tags=["Recruiter AI"])
@@ -35,7 +37,7 @@ def query_recruiter_ai(
     db: Session = Depends(get_db)
 ):
     # clean the question so the simple checks are easier
-    question = (payload.question or "").strip().lower()
+    question = (payload.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
 
@@ -51,86 +53,62 @@ def query_recruiter_ai(
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-    # answer skills questions for one selected cv
-    if "skill" in question and resume:
-        skills = extract_skills_from_text(resume.text_content or "")
-        if skills:
-            answer = f"the main skills in {resume.filename} are: {', '.join(skills)}"
-        else:
-            answer = f"i could not find any known skills in {resume.filename}"
+    # extract real context from the selected candidate and job
+    cv_skills = extract_skills_from_text(resume.text_content or "") if resume else []
+    job_skills = extract_skills_from_text(job.description or "") if job else []
+    missing_skills = [skill for skill in job_skills if skill not in cv_skills] if resume and job else []
+    suggestions = generate_suggestions(
+        resume.text_content or "",
+        job.description or "",
+        missing_skills,
+    ) if resume and job else []
 
-        return {
-            "answer": answer,
-            "skills": skills,
-            "resume_id": resume.id,
-            "job_id": payload.job_id,
-        }
+    selected_match = None
+    if resume and job:
+        selected_match = (
+            db.query(Match)
+            .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
+            .first()
+        )
 
-    # answer best match questions for one selected job
-    if job and ("best" in question or "top" in question or "rank" in question or "match" in question):
-        matches = (
+    top_match = None
+    if job:
+        top_match = (
             db.query(Match)
             .filter(Match.job_posting_id == job.id)
             .order_by(Match.match_score.desc())
-            .all()
+            .first()
         )
 
-        if not matches:
-            answer = f"there are no ranked candidates yet for {job.title}"
-            return {"answer": answer, "resume_id": payload.resume_id, "job_id": job.id}
+    context_data = {
+        "candidate_name": resume.filename if resume else "this candidate",
+        "job_title": job.title if job else "this role",
+        "cv_text": resume.text_content if resume else "",
+        "job_text": job.description if job else "",
+        "cv_skills": cv_skills,
+        "job_skills": job_skills,
+        "missing_skills": missing_skills,
+        "suggestions": suggestions,
+        "match_score": selected_match.match_score if selected_match else (top_match.match_score if top_match else None),
+        "best_candidate_name": top_match.resume.filename if top_match and top_match.resume else None,
+        "best_candidate_score": top_match.match_score if top_match else None,
+    }
 
-        top_names = [match.resume.filename for match in matches[:3]]
-        answer = f"the best matching candidates for {job.title} are: {', '.join(top_names)}"
+    intent = detect_intent(question)
+    answer = generate_response(intent, context_data)
 
-        return {
-            "answer": answer,
-            "top_candidates": top_names,
-            "resume_id": payload.resume_id,
-            "job_id": job.id,
-        }
-
-    # answer summary questions for one selected cv
-    if resume and ("summary" in question or "summarise" in question or "summarize" in question or "tell me about" in question):
-        skills = extract_skills_from_text(resume.text_content or "")
-        top_matches = (
-            db.query(Match)
-            .filter(Match.resume_id == resume.id)
-            .order_by(Match.match_score.desc())
-            .all()
-        )
-        top_jobs = [match.job_posting.title for match in top_matches[:3]]
-
-        answer = (
-            f"{resume.filename} has skills in {', '.join(skills) if skills else 'no known skills found'}"
-        )
-        if top_jobs:
-            answer += f" and matches best with {', '.join(top_jobs)}"
-
-        return {
-            "answer": answer,
-            "skills": skills,
-            "top_jobs": top_jobs,
-            "resume_id": resume.id,
-            "job_id": payload.job_id,
-        }
-
-    # answer simple count questions about candidates
-    if "how many" in question and ("candidate" in question or "cv" in question or "resume" in question):
-        resume_count = db.query(Resume).count()
-        answer = f"there are {resume_count} uploaded candidate resumes in the system"
-        return {
-            "answer": answer,
-            "candidate_count": resume_count,
-            "resume_id": payload.resume_id,
-            "job_id": payload.job_id,
-        }
-
-    # give a simple fallback if the question does not match a known pattern
     return {
-        "answer": (
-            "try a question like: what skills are in this cv, summarise this candidate, "
-            "or who are the best matches for this job"
-        ),
+        "answer": answer,
+        "intent": intent,
+        "cv_skills": cv_skills,
+        "job_skills": job_skills,
+        "match_score": context_data["match_score"],
         "resume_id": payload.resume_id,
         "job_id": payload.job_id,
+        "best_candidate_name": context_data["best_candidate_name"],
+        "best_candidate_score": context_data["best_candidate_score"],
+        "missing_skills": missing_skills,
+        "suggestions": suggestions,
+        "candidate_name": context_data["candidate_name"],
+        "job_title": context_data["job_title"],
     }

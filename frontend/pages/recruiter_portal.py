@@ -214,6 +214,9 @@ headers = {"Authorization": f"Bearer {st.session_state['token']}"}
 if "viewer_resume_id" not in st.session_state:
     st.session_state["viewer_resume_id"] = None
 
+if "recruiter_ai_chat_history" not in st.session_state:
+    st.session_state["recruiter_ai_chat_history"] = []
+
 # load page data
 jobs, jobs_error = fetch_json(f"{backend_url}/jobs/")
 resumes, resumes_error = fetch_json(f"{backend_url}/resumes/")
@@ -503,46 +506,46 @@ with ai_tab:
 
         st.markdown("<div class='field-gap'></div>", unsafe_allow_html=True)
 
-        recruiter_question = st.text_input(
-            "Ask a question",
-            placeholder="what are the skills in this cv?",
-            key="ai_question",
-        )
+        chat_container = st.container()
 
-        st.markdown("<div class='field-gap'></div>", unsafe_allow_html=True)
+        with chat_container:
+            for message in st.session_state["recruiter_ai_chat_history"]:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
-        if st.button("Ask recruiter AI", use_container_width=True):
-            if not recruiter_question.strip():
+        recruiter_question = st.chat_input("ask a question about the selected cv or job")
+
+        if recruiter_question:
+            cleaned_question = recruiter_question.strip()
+
+            if not cleaned_question:
                 st.warning("please enter a question first")
             else:
+                st.session_state["recruiter_ai_chat_history"].append(
+                    {"role": "user", "content": cleaned_question}
+                )
+
                 try:
                     response = requests.post(
                         f"{backend_url}/recruiter-ai/query/",
                         headers=headers,
                         json={
-                            "question": recruiter_question,
+                            "question": cleaned_question,
                             "resume_id": selected_resume_id,
                             "job_id": selected_job_id,
                         },
                         timeout=30,
                     )
                     if response.status_code == 200:
-                        st.session_state["recruiter_ai_answer"] = response.json().get("answer", "")
+                        assistant_answer = response.json().get("answer", "")
+                        st.session_state["recruiter_ai_chat_history"].append(
+                            {"role": "assistant", "content": assistant_answer}
+                        )
+                        st.rerun()
                     else:
                         st.error(response.text)
                 except requests.RequestException:
                     st.error("backend unavailable")
-
-        if st.session_state.get("recruiter_ai_answer"):
-            st.markdown(
-                (
-                    "<div style='background:#ffffff; border-radius:10px; padding:1rem; "
-                    "border:1px solid #e5e7eb; text-align:left;'>"
-                    f"{st.session_state['recruiter_ai_answer']}"
-                    "</div>"
-                ),
-                unsafe_allow_html=True,
-            )
 
 st.markdown("---")
 
