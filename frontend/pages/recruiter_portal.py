@@ -1,5 +1,6 @@
 import os
 import re
+from collections import Counter
 
 import pandas as pd
 import requests
@@ -26,6 +27,47 @@ def fetch_json(url, headers=None, timeout=20):
         return None, response.text
     except requests.RequestException:
         return None, "backend unavailable"
+
+
+def extract_skills_from_text(text):
+    # use the same small skill list as the backend logic
+    known_skills = [
+        "python",
+        "sql",
+        "fastapi",
+        "excel",
+        "cloud",
+        "react",
+        "machine learning",
+    ]
+
+    lowered_text = (text or "").lower()
+    found_skills = []
+
+    for skill in known_skills:
+        if skill in lowered_text:
+            found_skills.append(skill)
+
+    return found_skills
+
+
+def get_top_resume_skills(resume_list, headers):
+    # load each resume text and count how often each known skill appears
+    skill_counter = Counter()
+
+    for resume in resume_list:
+        resume_id = resume.get("id")
+        if resume_id is None:
+            continue
+
+        resume_data, resume_error = fetch_json(f"{backend_url}/resumes/{resume_id}", headers=headers)
+        if resume_error or not resume_data:
+            continue
+
+        for skill in extract_skills_from_text(resume_data.get("text_content", "")):
+            skill_counter[skill] += 1
+
+    return skill_counter.most_common(10)
 
 
 def summary_card(title, value, text):
@@ -183,6 +225,7 @@ latest_job_title = jobs[0]["title"] if jobs else "none yet"
 selected_resume_data = None
 candidate_rankings = []
 dashboard_rankings = []
+top_resume_skills = get_top_resume_skills(resumes, headers)
 
 if jobs:
     dashboard_rankings_data, _ = fetch_json(
@@ -228,7 +271,7 @@ with dashboard_tab:
 
     with st.container():
         # add simple charts for the dashboard tab
-        chart_left, chart_right = st.columns(2, gap="large")
+        chart_left, chart_middle, chart_right = st.columns(3, gap="large")
 
         with chart_left:
             st.markdown("<div class='section-title'>System Overview</div>", unsafe_allow_html=True)
@@ -244,6 +287,24 @@ with dashboard_tab:
                 }
             ).set_index("category")
             st.bar_chart(overview_df)
+
+        with chart_middle:
+            st.markdown("<div class='section-title'>Most Common Skills</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='section-subtitle'>Top 10 skills found across uploaded resumes.</div>",
+                unsafe_allow_html=True,
+            )
+
+            if top_resume_skills:
+                skills_df = pd.DataFrame(
+                    {
+                        "skill": [item[0] for item in top_resume_skills],
+                        "count": [item[1] for item in top_resume_skills],
+                    }
+                ).set_index("skill")
+                st.bar_chart(skills_df)
+            else:
+                st.info("no skills found yet")
 
         with chart_right:
             st.markdown("<div class='section-title'>Top Match Scores</div>", unsafe_allow_html=True)
