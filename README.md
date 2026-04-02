@@ -108,3 +108,14 @@ Styles the Streamlit pages, giving them custom colours, spacing and layout.
 
 images/
 Contains icons, logos and illustrations displayed across the pages.
+
+
+The LinkedIn job postings dataset is not included in this repository because of GitHub file size limits.
+
+Download the dataset from Kaggle:
+https://www.kaggle.com/datasets/arshkon/linkedin-job-postings
+
+Place postings.csv inside:
+backend/data/
+
+Then run the dataset loader script.
