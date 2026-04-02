@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -7,10 +8,10 @@ from backend.models.match_model import Match
 from backend.models.job_postings_model import JobPosting
 from backend.models.resume_model import Resume
 from backend.models.user_model import User
-from backend.nlp.improvement_suggestions import generate_suggestions
-from backend.nlp.skills_extractor import compare_skills, extract_skills_from_text
+from backend.nlp.skills_extractor import extract_skills_from_text
 from backend.services.cvService import generate_match_explanation, multi_step_match_analysis
 from backend.utils.dependencies import get_current_user, require_recruiter
+from backend.utils.embedding_utils import generate_embedding
 from backend.vectorStore.faiss_index import search as faiss_search
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
@@ -156,6 +157,14 @@ def search_matches_for_resume(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
+    # create and save the resume embedding if it is missing
+    if not resume.embedding or resume.embedding == "[]":
+        resume_text = resume.text_content or ""
+        resume_embedding = generate_embedding(resume_text)
+        resume.embedding = json.dumps(resume_embedding)
+        db.commit()
+        db.refresh(resume)
+
     # load the stored embedding (it is saved as json text)
     try:
         resume_embedding = json.loads(resume.embedding or "[]")
@@ -171,10 +180,12 @@ def search_matches_for_resume(
     cv_skills = extract_skills_from_text(cv_text)
 
     # run faiss search using the resume embedding
-    faiss_results = faiss_search(resume_embedding, k=5)
+    faiss_results = faiss_search(resume_embedding, k=10)
 
-    # build a clean list of job matches from the faiss results
+    # build a ranked list of job matches from the faiss results
     matches = []
+    seen_job_ids = set()
+
     for result in faiss_results:
         metadata = result.get("metadata") or {}
 
@@ -182,43 +193,71 @@ def search_matches_for_resume(
         job_id = metadata.get("job_id") or metadata.get("id") or metadata.get("job_posting_id")
         if job_id is None:
             continue
+        if job_id in seen_job_ids:
+            continue
+        seen_job_ids.add(job_id)
 
         job = db.query(JobPosting).filter(JobPosting.id == job_id).first()
         if not job:
             continue
 
-        # get the saved match row if it already exists in the database
+        # read job text and metadata so we can build a richer response
+        job_text = job.description or ""
+        analysis = multi_step_match_analysis(cv_text, job_text)
+        explanation = generate_match_explanation(cv_text, job_text)
+        faiss_score = float(result.get("score", 0.0))
+        skill_score = float(analysis.get("score", 0.0))
+        matching_skills = analysis.get("matching_skills", [])
+        missing_skills = analysis.get("missing_skills", [])
+
+        # combine faiss score with the current skill-based score
+        ranked_score = round((faiss_score + skill_score) / 2, 3)
+
+        # save or update the ranked match in the database
         saved_match = (
             db.query(Match)
             .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
             .first()
         )
-
-        # read job text and metadata so we can build a richer response
-        job_text = job.description or ""
-        job_skills = extract_skills_from_text(job_text)
-        missing_skills = compare_skills(cv_skills, job_skills)
-        suggestions = generate_suggestions(cv_text, job_text, missing_skills)
-        analysis = multi_step_match_analysis(cv_text, job_text)
-        explanation = generate_match_explanation(cv_text, job_text)
+        if saved_match:
+            saved_match.match_score = ranked_score
+            saved_match.generated_at = datetime.utcnow()
+        else:
+            saved_match = Match(
+                user_id=current_user.id,
+                resume_id=resume.id,
+                job_posting_id=job.id,
+                match_score=ranked_score,
+                created_at=datetime.utcnow(),
+                generated_at=datetime.utcnow(),
+            )
+            db.add(saved_match)
+            db.flush()
 
         # keep only first ~200 chars so response stays short
         description_preview = job_text[:200]
 
         matches.append({
-            "id": saved_match.id if saved_match else None,
-            "score": analysis.get("score", 0.0),
-            "matching_skills": analysis.get("matching_skills", []),
-            "missing_skills": analysis.get("missing_skills", []),
-            "explanation": explanation,
+            "id": saved_match.id,
+            "score": ranked_score,
+            "faiss_score": faiss_score,
+            "skill_match_score": skill_score,
             "job_id": job.id,
             "title": job.title,
-            "similarity_score": float(result.get("score", 0.0)),
+            "similarity_score": faiss_score,
             "description_preview": description_preview,
-            "job_metadata": metadata,
-            # keep the original fields so the current flow does not change
-            "suggestions": suggestions,
+            "reasoning": {
+                "matching_skills": matching_skills,
+                "missing_skills": missing_skills,
+                "explanation": explanation,
+            },
         })
 
-    # return the matches list directly
+    # save all match rows before returning
+    db.commit()
+
+    # rank matches from highest score to lowest
+    matches.sort(key=lambda item: item["score"], reverse=True)
+
+    # return the ranked matches list directly
     return matches

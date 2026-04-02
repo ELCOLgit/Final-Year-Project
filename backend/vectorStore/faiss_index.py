@@ -1,16 +1,64 @@
+import json
+from pathlib import Path
+from typing import Any, Dict, List
+
 import faiss
 import numpy as np
-from typing import Any, Dict, List
 
 
 # minilm gives 384 numbers for each embedding vector
 EMBEDDING_DIM = 384
 
-# this faiss index uses inner product to measure similarity
-index = faiss.IndexFlatIP(EMBEDDING_DIM)
+# store the faiss files inside backend/data
+data_dir = Path(__file__).resolve().parent.parent / "data"
+index_file = data_dir / "job_postings.faiss"
+metadata_file = data_dir / "job_postings_metadata.json"
+
+
+def create_empty_index():
+    # this faiss index uses inner product to measure similarity
+    return faiss.IndexFlatIP(EMBEDDING_DIM)
+
+
+index = create_empty_index()
 
 # store metadata in the same order as vectors added to faiss
 metadata_store: List[Dict[str, Any]] = []
+
+
+def load_index():
+    # load the faiss index and metadata from disk if they exist
+    global index, metadata_store
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    if index_file.exists():
+        index = faiss.read_index(str(index_file))
+    else:
+        index = create_empty_index()
+
+    if metadata_file.exists():
+        with open(metadata_file, "r", encoding="utf-8") as file:
+            metadata_store = json.load(file)
+    else:
+        metadata_store = []
+
+
+def save_index():
+    # save the faiss index and metadata to disk
+    data_dir.mkdir(parents=True, exist_ok=True)
+    faiss.write_index(index, str(index_file))
+
+    with open(metadata_file, "w", encoding="utf-8") as file:
+        json.dump(metadata_store, file, indent=2)
+
+
+def reset_index():
+    # recreate the index and clear metadata
+    global index, metadata_store
+    index = create_empty_index()
+    metadata_store = []
+    save_index()
 
 
 def add_vector(embedding, metadata):
@@ -22,6 +70,7 @@ def add_vector(embedding, metadata):
 
     # save matching metadata so we can return it in search results
     metadata_store.append(metadata)
+    save_index()
 
 
 def search(embedding, k=5):
@@ -49,3 +98,7 @@ def search(embedding, k=5):
 def index_size():
     # return total vectors currently stored in the faiss index
     return index.ntotal
+
+
+# load saved faiss data when this file is imported
+load_index()

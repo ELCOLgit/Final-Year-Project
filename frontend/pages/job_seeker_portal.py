@@ -20,6 +20,13 @@ def highlight_keywords(text, keywords):
     return re.sub(pattern, r"<mark style='background-color:#ffeb3b;'>\1</mark>", text)
 
 
+# helper to show skill lists in a simple way
+def format_skills(skills):
+    if not skills:
+        return "None"
+    return ", ".join(skills)
+
+
 # load shared css file
 css_path = os.path.join(os.path.dirname(__file__), "..", "assets", "styles.css")
 with open(css_path) as f:
@@ -159,19 +166,27 @@ if search_resume_id and search_matches is not None:
         st.info("No search results to show.")
     else:
         for i, match in enumerate(search_matches):
-            # show title + similarity score for each match
             title = match.get("title", "unknown")
-            score = float(match.get("similarity_score", 0.0))
+            score = float(match.get("score", 0.0))
             job_id = match.get("job_id")
+            reasoning = match.get("reasoning", {})
+            matching_skills = reasoning.get("matching_skills", [])
+            missing_skills = reasoning.get("missing_skills", [])
+            explanation = reasoning.get("explanation", "No explanation available.")
 
-            st.markdown(f"**job title:** {title}")
-            st.write(f"similarity score: {score:.3f}")
+            # show each match in a simple container
+            with st.container(border=True):
+                st.subheader(title)
+                st.write(f"score: {score:.3f}")
+                st.write(f"matching skills: {format_skills(matching_skills)}")
+                st.write(f"missing skills: {format_skills(missing_skills)}")
+                st.write(f"explanation: {explanation}")
 
-            # when user clicks this, we show cv text vs job description
-            if st.button("compare cv text vs job description", key=f"compare_btn_{i}"):
-                st.session_state["compare_job_id"] = job_id
-                st.session_state["compare_job_title"] = title
-                st.session_state["compare_match_data"] = match
+                # when user clicks this, we show cv text vs job description
+                if st.button("compare cv with this job", key=f"compare_btn_{i}"):
+                    st.session_state["compare_job_id"] = job_id
+                    st.session_state["compare_job_title"] = title
+                    st.session_state["compare_match_data"] = match
 
 
 # show compare panel when a compare button was clicked
@@ -186,8 +201,10 @@ if compare_job_id and search_resume_id:
     if resume_res.status_code == 200 and job_res.status_code == 200:
         resume_text = resume_res.json().get("text_content", "")
         job_text = job_res.json().get("description", "")
-        missing_skills = compare_match_data.get("missing_skills", [])
-        suggestions = compare_match_data.get("suggestions", [])
+        reasoning = compare_match_data.get("reasoning", {})
+        missing_skills = reasoning.get("missing_skills", [])
+        matching_skills = reasoning.get("matching_skills", [])
+        explanation = reasoning.get("explanation", "No explanation available.")
 
         # simple keyword list for highlighting overlap
         keywords = [
@@ -224,43 +241,13 @@ if compare_job_id and search_resume_id:
             )
 
         st.markdown("### missing skills")
+        st.write(format_skills(missing_skills))
 
-        # show missing skills in a simple grey rounded box
-        if missing_skills:
-            missing_skills_html = "".join([f"<li>{skill}</li>" for skill in missing_skills])
-            st.markdown(
-                (
-                    "<div style='border:1px solid #d9d9d9; border-radius:10px; "
-                    "padding:14px; background:#f3f3f3;'>"
-                    f"<ul style='margin:0; padding-left:20px;'>{missing_skills_html}</ul>"
-                    "</div>"
-                ),
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                (
-                    "<div style='border:1px solid #d9d9d9; border-radius:10px; "
-                    "padding:14px; background:#f3f3f3;'>"
-                    "no missing skills found"
-                    "</div>"
-                ),
-                unsafe_allow_html=True,
-            )
+        st.markdown("### matching skills")
+        st.write(format_skills(matching_skills))
 
-        st.markdown("### resume improvement suggestions")
-
-        # show suggestions below the comparison columns
-        suggestions_html = "".join([f"<li>{suggestion}</li>" for suggestion in suggestions])
-        st.markdown(
-            (
-                "<div style='border:1px solid #d9d9d9; border-radius:10px; "
-                "padding:14px; background:#f3f3f3;'>"
-                f"<ul style='margin:0; padding-left:20px;'>{suggestions_html}</ul>"
-                "</div>"
-            ),
-            unsafe_allow_html=True,
-        )
+        st.markdown("### explanation")
+        st.write(explanation)
     else:
         st.error("Could not load resume/job text for comparison.")
 
