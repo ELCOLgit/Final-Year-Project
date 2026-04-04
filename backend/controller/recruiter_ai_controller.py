@@ -10,7 +10,7 @@ from backend.models.match_model import Match
 from backend.models.resume_model import Resume
 from backend.nlp.improvement_suggestions import generate_suggestions
 from backend.nlp.skills_extractor import extract_skills_from_text
-from backend.services.cvService import detect_intent, generate_response
+from backend.services.cvService import detect_intent, generate_response, get_match_label
 from backend.utils.dependencies import require_recruiter
 
 router = APIRouter(prefix="/recruiter-ai", tags=["Recruiter AI"])
@@ -40,12 +40,7 @@ def build_score_data(score):
             "match_label": None,
         }
 
-    if score > 0.7:
-        match_label = "strong match"
-    elif score >= 0.4:
-        match_label = "moderate match"
-    else:
-        match_label = "weak match"
+    match_label = get_match_label(score)
 
     return {
         "match_score": score,

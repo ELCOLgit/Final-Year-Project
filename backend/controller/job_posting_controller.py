@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models.job_postings_model import JobPosting
-from backend.models.user_model import User, UserRole
+from backend.models.user_model import User
 from datetime import datetime
 from backend.utils.dependencies import require_recruiter
 from fastapi import Path
@@ -31,20 +31,11 @@ def get_db():
 async def upload_job_posting(
     title: str = Form(...),
     description: str = Form(...),
+    current_user: User = Depends(require_recruiter),
     db: Session = Depends(get_db)
 ):
-    # create or get demo recruiter user
-    recruiter = db.query(User).filter(User.id == 2).first()
-    if not recruiter:
-        recruiter = User(
-            name="Demo Recruiter",
-            email="recruiter@example.com",
-            password_hash="123",
-            role=UserRole.recruiter
-        )
-        db.add(recruiter)
-        db.commit()
-        db.refresh(recruiter)
+    # use the logged in recruiter for uploaded jobs
+    recruiter = current_user
 
     # preprocess the job description first
     cleaned_description = preprocess_text(description)
@@ -78,8 +69,12 @@ async def upload_job_posting(
 
 # view all job postings
 @router.get("/")
-def list_job_postings(db: Session = Depends(get_db)):
-    jobs = db.query(JobPosting).all()
+def list_job_postings(
+    current_user: User = Depends(require_recruiter),
+    db: Session = Depends(get_db)
+):
+    # only show jobs owned by the logged in recruiter
+    jobs = db.query(JobPosting).filter(JobPosting.recruiter_id == current_user.id).all()
     return [
         {
             "id": j.id,

@@ -1,10 +1,17 @@
 import os
 import re
+import sys
 from collections import Counter
+from pathlib import Path
 
 import pandas as pd
 import requests
 import streamlit as st
+
+# add the project root so backend imports work when streamlit runs this page
+project_root = Path(__file__).resolve().parents[2]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from backend.services.cvService import (
     compare_matching_methods,
@@ -23,6 +30,22 @@ def highlight_keywords(text, keywords):
 
     pattern = r"(?i)(" + "|".join(escaped) + ")"
     return re.sub(pattern, r"<mark style='background-color:#fde68a;'>\1</mark>", text)
+
+
+def format_skills(skills):
+    # show skill lists in a simple readable way
+    if not skills:
+        return "none"
+    return ", ".join(skills)
+
+
+def get_match_label(score):
+    # use the final score to pick a simple label
+    if score >= 0.75:
+        return "strong match"
+    if score >= 0.5:
+        return "moderate match"
+    return "weak match"
 
 
 def fetch_json(url, headers=None, timeout=20):
@@ -173,6 +196,22 @@ def get_unique_rankings(candidates):
     return unique_candidates
 
 
+def unique_by_id(items, id_key):
+    # keep only one item for each id in frontend lists
+    unique_items = []
+    seen_ids = set()
+
+    for item in items:
+        item_id = item.get(id_key)
+        if item_id in seen_ids:
+            continue
+
+        seen_ids.add(item_id)
+        unique_items.append(item)
+
+    return unique_items
+
+
 def load_comparison_results(job_id, candidates, headers):
     # load the selected job once and compare it with each candidate cv
     comparison_results = []
@@ -194,21 +233,27 @@ def load_comparison_results(job_id, candidates, headers):
         cv_text = resume_data.get("text_content", "")
         method_scores = compare_matching_methods(cv_text, job_text)
         analysis = multi_step_match_analysis(cv_text, job_text)
-        explanation = generate_match_explanation(cv_text, job_text)
+        embedding_score = method_scores.get("embedding_score", 0.0)
+
+        # support both the old and new explanation function signatures
+        try:
+            explanation = generate_match_explanation(cv_text, job_text, embedding_score)
+        except TypeError:
+            explanation = generate_match_explanation(cv_text, job_text)
 
         comparison_results.append({
             "filename": candidate.get("filename", "unknown cv"),
             "resume_id": resume_id,
             "ats_score": method_scores.get("ats_score", 0.0),
             "tfidf_score": method_scores.get("tfidf_score", 0.0),
-            "embedding_score": method_scores.get("embedding_score", 0.0),
-            "match_label": analysis.get("match_label", "weak match"),
+            "embedding_score": embedding_score,
+            "match_label": get_match_label(embedding_score),
             "matching_skills": analysis.get("matching_skills", []),
             "missing_skills": analysis.get("missing_skills", []),
             "explanation": explanation,
         })
 
-    return comparison_results, None
+    return unique_by_id(comparison_results, "resume_id"), None
 
 
 st.set_page_config(page_title="Recruiter Portal", page_icon="briefcase", layout="wide")
@@ -264,11 +309,15 @@ if "recruiter_ai_chat_history" not in st.session_state:
     st.session_state["recruiter_ai_chat_history"] = []
 
 # load page data
-jobs, jobs_error = fetch_json(f"{backend_url}/jobs/")
+jobs, jobs_error = fetch_json(f"{backend_url}/jobs/", headers=headers)
 resumes, resumes_error = fetch_json(f"{backend_url}/resumes/")
 
-jobs = jobs or []
-resumes = resumes or []
+jobs = unique_by_id(jobs or [], "id")
+resumes = unique_by_id(resumes or [], "id")
+
+# sort the main dropdown lists alphabetically before showing them
+jobs = sorted(jobs, key=lambda item: item.get("title", "").lower())
+resumes = sorted(resumes, key=lambda item: item.get("filename", "").lower())
 
 latest_job_title = jobs[0]["title"] if jobs else "none yet"
 selected_resume_data = None
@@ -425,9 +474,14 @@ with ranking_tab:
             elif not jobs:
                 st.info("upload a job posting first to see candidate rankings")
             else:
+                # sort job options alphabetically for the ranking dropdown
+                ranking_job_ids = sorted(
+                    [job["id"] for job in jobs],
+                    key=lambda value: next(job["title"] for job in jobs if job["id"] == value).lower(),
+                )
                 ranking_job_id = st.selectbox(
                     "Selected job",
-                    [job["id"] for job in jobs],
+                    ranking_job_ids,
                     format_func=lambda value: next(job["title"] for job in jobs if job["id"] == value),
                     key="ranking_job_id",
                 )
@@ -465,7 +519,11 @@ with ranking_tab:
         elif not resumes:
             st.info("no resumes uploaded yet")
         else:
-            resume_ids = [resume["id"] for resume in resumes]
+            # sort candidate options alphabetically for the cv viewer
+            resume_ids = sorted(
+                [resume["id"] for resume in resumes],
+                key=lambda value: next(resume["filename"] for resume in resumes if resume["id"] == value).lower(),
+            )
             if st.session_state["viewer_resume_id"] not in resume_ids:
                 st.session_state["viewer_resume_id"] = resume_ids[0]
 
@@ -530,9 +588,14 @@ with comparison_tab:
         elif not jobs:
             st.info("upload or import a job first to compare candidates")
         else:
+            # sort job options alphabetically for the comparison dropdown
+            comparison_job_ids = sorted(
+                [job["id"] for job in jobs],
+                key=lambda value: next(job["title"] for job in jobs if job["id"] == value).lower(),
+            )
             comparison_job_id = st.selectbox(
                 "Selected comparison job",
-                [job["id"] for job in jobs],
+                comparison_job_ids,
                 format_func=lambda value: next(job["title"] for job in jobs if job["id"] == value),
                 key="comparison_job_id",
             )
@@ -563,22 +626,35 @@ with comparison_tab:
                         with st.container(border=True):
                             st.subheader(result["filename"])
 
-                            score_col_1, score_col_2, score_col_3, score_col_4 = st.columns(4)
+                            # keep the summary compact so it is easy to scan
+                            final_left, final_right = st.columns([2, 1], gap="medium")
+
+                            with final_left:
+                                st.markdown("**Final AI Match**")
+                                st.metric(
+                                    "Embedding Score",
+                                    f"{round(result['embedding_score'] * 100)}%",
+                                )
+
+                            with final_right:
+                                st.markdown("**Match Label**")
+                                st.metric("Final Label", result["match_label"])
+
+                            st.markdown("**Score Summary**")
+                            score_col_1, score_col_2, score_col_3 = st.columns(3, gap="medium")
                             score_col_1.metric("ATS Score", f"{round(result['ats_score'] * 100)}%")
                             score_col_2.metric("TF-IDF Score", f"{round(result['tfidf_score'] * 100)}%")
                             score_col_3.metric("Embedding Score", f"{round(result['embedding_score'] * 100)}%")
-                            score_col_4.metric("Final Match Label", result["match_label"])
 
-                            detail_left, detail_right = st.columns(2, gap="large")
-
-                            with detail_left:
-                                st.markdown("**matching skills**")
+                            # keep the detailed reasoning inside an expander
+                            with st.expander("view details"):
+                                st.markdown("**Matching Skills**")
                                 st.write(format_skills(result["matching_skills"]))
-                                st.markdown("**missing skills**")
+
+                                st.markdown("**Missing Skills**")
                                 st.write(format_skills(result["missing_skills"]))
 
-                            with detail_right:
-                                st.markdown("**explanation**")
+                                st.markdown("**Explanation**")
                                 st.write(result["explanation"])
 
 with ai_tab:
@@ -594,9 +670,14 @@ with ai_tab:
         selected_job_id = None
 
         if resumes:
+            # sort candidate options alphabetically for ai context
+            ai_resume_ids = sorted(
+                [resume["id"] for resume in resumes],
+                key=lambda value: next(resume["filename"] for resume in resumes if resume["id"] == value).lower(),
+            )
             selected_resume_id = st.selectbox(
                 "Candidate context",
-                [None] + [resume["id"] for resume in resumes],
+                [None] + ai_resume_ids,
                 format_func=lambda value: "no candidate selected" if value is None else next(
                     resume["filename"] for resume in resumes if resume["id"] == value
                 ),
@@ -606,9 +687,14 @@ with ai_tab:
         st.markdown("<div class='field-gap'></div>", unsafe_allow_html=True)
 
         if jobs:
+            # sort job options alphabetically for ai context
+            ai_job_ids = sorted(
+                [job["id"] for job in jobs],
+                key=lambda value: next(job["title"] for job in jobs if job["id"] == value).lower(),
+            )
             selected_job_id = st.selectbox(
                 "Job context",
-                [None] + [job["id"] for job in jobs],
+                [None] + ai_job_ids,
                 format_func=lambda value: "no job selected" if value is None else next(
                     job["title"] for job in jobs if job["id"] == value
                 ),

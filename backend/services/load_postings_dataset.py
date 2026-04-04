@@ -40,6 +40,7 @@ df = df.dropna(subset=[title_column, description_column])
 db = SessionLocal()
 imported_count = 0
 skipped_count = 0
+seen_jobs = set()
 
 try:
     for _, row in df.iterrows():
@@ -52,6 +53,17 @@ try:
 
         # clean the description using the existing preprocessing function
         cleaned_description = preprocess_text(description)
+        job_key = (title, cleaned_description)
+
+        # skip duplicate rows inside the current import batch too
+        if job_key in seen_jobs:
+            print(
+                f"title: {title} | database id: none | "
+                f"embedding created: no | added to faiss: no | status: skipped"
+            )
+            skipped_count += 1
+            continue
+        seen_jobs.add(job_key)
 
         # check if the same job is already in the database
         existing_job = (

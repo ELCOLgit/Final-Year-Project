@@ -66,6 +66,15 @@ def compare_matching_methods(cv_text, job_text):
     }
 
 
+def get_match_label(score):
+    # use one simple label rule everywhere in the project
+    if score >= 0.75:
+        return "strong match"
+    if score >= 0.5:
+        return "moderate match"
+    return "weak match"
+
+
 def detect_intent(question: str) -> str:
     # normalize the question for simple keyword matching
     normalized_question = question.lower()
@@ -296,13 +305,8 @@ def multi_step_match_analysis(cv_text, job_text):
     percentage_score = round(score * 100)
     rating_score = round(score * 10)
 
-    # add a simple label for the match strength
-    if score >= 0.75:
-        match_label = "strong match"
-    elif score >= 0.45:
-        match_label = "moderate match"
-    else:
-        match_label = "weak match"
+    # keep a simple label here for the analysis result
+    match_label = get_match_label(score)
 
     print("base score:", float(base_score))
     print("bonus:", float(bonus))
@@ -328,45 +332,25 @@ def explain_score(matching_skills, missing_skills, score, percentage_score, rati
     matching_count = len(matching_skills or [])
     missing_count = len(missing_skills or [])
 
-    # build a more natural explanation using the new score fields
-    if match_label == "strong match":
-        if missing_count == 0:
-            return (
-                f"this candidate is a strong match with a score of {percentage_score} percent "
-                f"and a rating of {rating_score} out of 10. they match {matching_count} important "
-                f"skills and meet most of the main job requirements."
-            )
-        return (
-            f"this candidate is a strong match with a score of {percentage_score} percent "
-            f"and a rating of {rating_score} out of 10. they match {matching_count} important "
-            f"skills and are only missing {missing_count} skills from the job."
-        )
-
-    if match_label == "moderate match":
-        return (
-            f"this candidate is a moderate match with a score of {percentage_score} percent "
-            f"and a rating of {rating_score} out of 10. they match {matching_count} important "
-            f"skills but are missing {missing_count} skills from the job."
-        )
-
+    # build one simple explanation that always uses the real score values
     return (
-        f"this candidate is a weak match with a score of {percentage_score} percent "
-        f"and a rating of {rating_score} out of 10. they match {matching_count} important "
-        f"skills and are missing {missing_count} skills from the job."
+        f"this candidate is a {match_label} with a score of {percentage_score} percent, "
+        f"or {rating_score} out of 10. they match {matching_count} skills but are missing "
+        f"{missing_count} required skills."
     )
 
 
-def generate_match_explanation(cv_text, job_text):
+def generate_match_explanation(cv_text, job_text, final_score=None):
     # run the multi-step analysis first
     analysis = multi_step_match_analysis(cv_text, job_text)
 
     # get the main values from the analysis
     matching_skills = analysis.get("matching_skills", [])
     missing_skills = analysis.get("missing_skills", [])
-    score = analysis.get("score", 0.0)
-    percentage_score = analysis.get("percentage_score", 0)
-    rating_score = analysis.get("rating_score", 0)
-    match_label = analysis.get("match_label", "weak match")
+    score = float(final_score) if final_score is not None else analysis.get("score", 0.0)
+    percentage_score = round(score * 100)
+    rating_score = round(score * 10)
+    match_label = get_match_label(score)
 
     # build readable skill text
     matching_text = _format_list(matching_skills[:3])

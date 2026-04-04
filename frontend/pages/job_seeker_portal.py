@@ -27,6 +27,22 @@ def format_skills(skills):
     return ", ".join(skills)
 
 
+def unique_by_id(items, id_key):
+    # keep only one item for each id in frontend loops
+    unique_items = []
+    seen_ids = set()
+
+    for item in items:
+        item_id = item.get(id_key)
+        if item_id in seen_ids:
+            continue
+
+        seen_ids.add(item_id)
+        unique_items.append(item)
+
+    return unique_items
+
+
 # load shared css file
 css_path = os.path.join(os.path.dirname(__file__), "..", "assets", "styles.css")
 with open(css_path) as f:
@@ -92,6 +108,7 @@ if st.button("Load All Matches", use_container_width=True):
         st.error(res.text)
     else:
         matches = res.json()
+        matches = unique_by_id(matches, "id")
         if not matches:
             st.info("No matches yet. Make sure a recruiter has generated them.")
         else:
@@ -120,7 +137,10 @@ if st.session_state.get("show_top_matches"):
         st.error(resumes_res.text)
     else:
         top_matches = top_res.json().get("top_matches", [])
-        resumes = resumes_res.json()
+        top_matches = unique_by_id(top_matches, "resume")
+        # sort dropdown data alphabetically before showing it
+        top_matches = sorted(top_matches, key=lambda item: item.get("job_title", "").lower())
+        resumes = sorted(resumes_res.json(), key=lambda item: item.get("filename", "").lower())
         resume_id_by_filename = {r["filename"]: r["id"] for r in resumes}
 
         if not top_matches:
@@ -157,7 +177,7 @@ if st.session_state.get("show_top_matches"):
                         st.error(search_res.text)
                     else:
                         st.session_state["search_resume_id"] = selected_resume_id
-                        st.session_state["search_matches"] = search_res.json()
+                        st.session_state["search_matches"] = unique_by_id(search_res.json(), "job_id")
 
 
 # show faiss search results if they were loaded

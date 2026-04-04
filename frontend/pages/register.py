@@ -23,7 +23,9 @@ with st.form("register_form"):
     name = st.text_input("Full Name")
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
-    role_display = st.selectbox("Role", ["Job Seeker", "Recruiter"])
+    # sort the role options alphabetically before showing them
+    role_options = sorted(["Job Seeker", "Recruiter"])
+    role_display = st.selectbox("Role", role_options)
     role = "job_seeker" if role_display == "Job Seeker" else "recruiter"
 
     submit = st.form_submit_button("SIGN UP")

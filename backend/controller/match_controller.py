@@ -9,7 +9,7 @@ from backend.models.job_postings_model import JobPosting
 from backend.models.resume_model import Resume
 from backend.models.user_model import User
 from backend.nlp.skills_extractor import extract_skills_from_text
-from backend.services.cvService import generate_match_explanation, multi_step_match_analysis
+from backend.services.cvService import generate_match_explanation, get_match_label, multi_step_match_analysis
 from backend.utils.dependencies import get_current_user, require_recruiter
 from backend.utils.embedding_utils import generate_embedding
 from backend.vectorStore.faiss_index import search as faiss_search
@@ -27,12 +27,7 @@ def get_db():
 
 def build_score_data(score):
     # add a simple label for the match strength
-    if score > 0.7:
-        match_label = "strong match"
-    elif score >= 0.4:
-        match_label = "moderate match"
-    else:
-        match_label = "weak match"
+    match_label = get_match_label(score)
 
     # keep the original score and also add simpler display formats
     return {
@@ -41,6 +36,22 @@ def build_score_data(score):
         "rating_score": round(score * 10),
         "match_label": match_label,
     }
+
+
+def unique_by_id(items, id_key):
+    # keep only one item for each id
+    unique_items = []
+    seen_ids = set()
+
+    for item in items:
+        item_id = item.get(id_key)
+        if item_id in seen_ids:
+            continue
+
+        seen_ids.add(item_id)
+        unique_items.append(item)
+
+    return unique_items
 
 
 @router.get("/")
@@ -55,7 +66,7 @@ def get_user_matches(
         .all()
     )
 
-    return [
+    results = [
         {
             "id": m.id,
             "resume": m.resume.filename,
@@ -92,7 +103,7 @@ def get_top_matches(
                 "generated_at": top.generated_at
             })
 
-    return {"top_matches": results}
+    return {"top_matches": unique_by_id(results, "resume")}
 
 @router.get("/by-resume/{resume_id}")
 def get_matches_for_resume(
@@ -107,7 +118,7 @@ def get_matches_for_resume(
         .all()
     )
 
-    return [
+    results = [
         {
             "job_id": m.job_posting.id,
             "job_title": m.job_posting.title,
@@ -116,12 +127,13 @@ def get_matches_for_resume(
         }
         for m in matches
     ]
+    return unique_by_id(results, "job_id")
 
 
 @router.get("/debug/")
 def debug_matches(db: Session = Depends(get_db)):
     matches = db.query(Match).all()
-    return [
+    results = [
         {
             "id": m.id,
             "user_id": m.user_id,
@@ -131,6 +143,8 @@ def debug_matches(db: Session = Depends(get_db)):
         }
         for m in matches
     ]
+    return unique_by_id(results, "id")
+    return unique_by_id(results, "id")
 
 
 @router.get("/by-job/{job_id}")
@@ -139,6 +153,15 @@ def get_matches_for_job(
     current_user: User = Depends(require_recruiter),
     db: Session = Depends(get_db)
 ):
+    # make sure the recruiter can only view their own job rankings
+    job = (
+        db.query(JobPosting)
+        .filter(JobPosting.id == job_id, JobPosting.recruiter_id == current_user.id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
     # load all matches for one job and rank them from highest to lowest
     matches = (
         db.query(Match)
@@ -147,7 +170,7 @@ def get_matches_for_job(
         .all()
     )
 
-    return [
+    results = [
         {
             "resume_id": m.resume.id,
             "filename": m.resume.filename,
@@ -158,6 +181,7 @@ def get_matches_for_job(
         }
         for m in matches
     ]
+    return unique_by_id(results, "resume_id")
 
 
 @router.get("/search/{resume_id}")
@@ -222,30 +246,29 @@ def search_matches_for_resume(
         # read job text and metadata so we can build a richer response
         job_text = job.description or ""
         analysis = multi_step_match_analysis(cv_text, job_text)
-        explanation = generate_match_explanation(cv_text, job_text)
         faiss_score = float(result.get("score", 0.0))
         skill_score = float(analysis.get("score", 0.0))
         matching_skills = analysis.get("matching_skills", [])
         missing_skills = analysis.get("missing_skills", [])
 
-        # combine faiss score with the current skill-based score
-        ranked_score = round((faiss_score + skill_score) / 2, 3)
+        # use the embedding score as the final score shown in the ui
+        final_score = round(faiss_score, 3)
 
-        # save or update the ranked match in the database
+        # save or update the final embedding score in the database
         saved_match = (
             db.query(Match)
             .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
             .first()
         )
         if saved_match:
-            saved_match.match_score = ranked_score
+            saved_match.match_score = final_score
             saved_match.generated_at = datetime.utcnow()
         else:
             saved_match = Match(
                 user_id=current_user.id,
                 resume_id=resume.id,
                 job_posting_id=job.id,
-                match_score=ranked_score,
+                match_score=final_score,
                 created_at=datetime.utcnow(),
                 generated_at=datetime.utcnow(),
             )
@@ -257,7 +280,7 @@ def search_matches_for_resume(
 
         matches.append({
             "id": saved_match.id,
-            **build_score_data(ranked_score),
+            **build_score_data(final_score),
             "faiss_score": faiss_score,
             "skill_match_score": skill_score,
             "job_id": job.id,
@@ -267,7 +290,7 @@ def search_matches_for_resume(
             "reasoning": {
                 "matching_skills": matching_skills,
                 "missing_skills": missing_skills,
-                "explanation": explanation,
+                "explanation": generate_match_explanation(cv_text, job_text, final_score),
             },
         })
 
@@ -278,4 +301,4 @@ def search_matches_for_resume(
     matches.sort(key=lambda item: item["score"], reverse=True)
 
     # return the ranked matches list directly
-    return matches
+    return unique_by_id(matches, "job_id")
