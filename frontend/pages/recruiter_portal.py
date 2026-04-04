@@ -6,6 +6,12 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from backend.services.cvService import (
+    compare_matching_methods,
+    generate_match_explanation,
+    multi_step_match_analysis,
+)
+
 
 def highlight_keywords(text, keywords):
     if not text:
@@ -167,6 +173,44 @@ def get_unique_rankings(candidates):
     return unique_candidates
 
 
+def load_comparison_results(job_id, candidates, headers):
+    # load the selected job once and compare it with each candidate cv
+    comparison_results = []
+    job_data, job_error = fetch_json(f"{backend_url}/jobs/{job_id}")
+    if job_error or not job_data:
+        return [], job_error or "could not load job"
+
+    job_text = job_data.get("description", "")
+
+    for candidate in candidates:
+        resume_id = candidate.get("resume_id")
+        if resume_id is None:
+            continue
+
+        resume_data, resume_error = fetch_json(f"{backend_url}/resumes/{resume_id}", headers=headers)
+        if resume_error or not resume_data:
+            continue
+
+        cv_text = resume_data.get("text_content", "")
+        method_scores = compare_matching_methods(cv_text, job_text)
+        analysis = multi_step_match_analysis(cv_text, job_text)
+        explanation = generate_match_explanation(cv_text, job_text)
+
+        comparison_results.append({
+            "filename": candidate.get("filename", "unknown cv"),
+            "resume_id": resume_id,
+            "ats_score": method_scores.get("ats_score", 0.0),
+            "tfidf_score": method_scores.get("tfidf_score", 0.0),
+            "embedding_score": method_scores.get("embedding_score", 0.0),
+            "match_label": analysis.get("match_label", "weak match"),
+            "matching_skills": analysis.get("matching_skills", []),
+            "missing_skills": analysis.get("missing_skills", []),
+            "explanation": explanation,
+        })
+
+    return comparison_results, None
+
+
 st.set_page_config(page_title="Recruiter Portal", page_icon="briefcase", layout="wide")
 
 # load shared css file
@@ -247,7 +291,7 @@ with header_right:
     if st.button("refresh", help="refresh data"):
         st.rerun()
 
-dashboard_tab, ranking_tab, ai_tab = st.tabs(["Dashboard", "Ranking", "AI Assistant"])
+dashboard_tab, ranking_tab, comparison_tab, ai_tab = st.tabs(["Dashboard", "Ranking", "Comparison", "AI Assistant"])
 
 with dashboard_tab:
     with st.container():
@@ -471,6 +515,71 @@ with ranking_tab:
                     ),
                     unsafe_allow_html=True,
                 )
+
+with comparison_tab:
+    with st.container():
+        # keep the comparison tools in their own tab
+        st.markdown("<div class='section-title'>Candidate Comparison</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='section-subtitle'>Compare ats, tf-idf, embedding, and final match details for each candidate.</div>",
+            unsafe_allow_html=True,
+        )
+
+        if jobs_error:
+            st.error(jobs_error)
+        elif not jobs:
+            st.info("upload or import a job first to compare candidates")
+        else:
+            comparison_job_id = st.selectbox(
+                "Selected comparison job",
+                [job["id"] for job in jobs],
+                format_func=lambda value: next(job["title"] for job in jobs if job["id"] == value),
+                key="comparison_job_id",
+            )
+
+            comparison_data, comparison_error = fetch_json(
+                f"{backend_url}/matches/by-job/{comparison_job_id}",
+                headers=headers,
+            )
+            comparison_candidates = get_unique_rankings(comparison_data or [])
+
+            if comparison_error:
+                st.error(comparison_error)
+            elif not comparison_candidates:
+                st.info("no candidate matches available for this job yet")
+            else:
+                comparison_results, load_error = load_comparison_results(
+                    comparison_job_id,
+                    comparison_candidates,
+                    headers,
+                )
+
+                if load_error:
+                    st.error(load_error)
+                elif not comparison_results:
+                    st.info("no comparison results available yet")
+                else:
+                    for result in comparison_results:
+                        with st.container(border=True):
+                            st.subheader(result["filename"])
+
+                            score_col_1, score_col_2, score_col_3, score_col_4 = st.columns(4)
+                            score_col_1.metric("ATS Score", f"{round(result['ats_score'] * 100)}%")
+                            score_col_2.metric("TF-IDF Score", f"{round(result['tfidf_score'] * 100)}%")
+                            score_col_3.metric("Embedding Score", f"{round(result['embedding_score'] * 100)}%")
+                            score_col_4.metric("Final Match Label", result["match_label"])
+
+                            detail_left, detail_right = st.columns(2, gap="large")
+
+                            with detail_left:
+                                st.markdown("**matching skills**")
+                                st.write(format_skills(result["matching_skills"]))
+                                st.markdown("**missing skills**")
+                                st.write(format_skills(result["missing_skills"]))
+
+                            with detail_right:
+                                st.markdown("**explanation**")
+                                st.write(result["explanation"])
 
 with ai_tab:
     with st.container():

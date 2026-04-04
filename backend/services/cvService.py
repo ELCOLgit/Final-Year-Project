@@ -1,7 +1,69 @@
 import random
+import re
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 from backend.nlp.skills_extractor import compare_skills, extract_skills_from_text
 from backend.nlp.improvement_suggestions import generate_suggestions
+from backend.utils.embedding_utils import generate_embedding
+
+
+def ats_keyword_match(cv_text, job_text):
+    # extract simple lowercase words from both texts
+    cv_words = set(re.findall(r"\b\w+\b", (cv_text or "").lower()))
+    job_words = set(re.findall(r"\b\w+\b", (job_text or "").lower()))
+
+    # find matching and missing job keywords
+    matching_keywords = sorted(cv_words.intersection(job_words))
+    missing_keywords = sorted(job_words - cv_words)
+
+    # calculate a simple overlap score
+    total_job_keywords = len(job_words)
+    if total_job_keywords > 0:
+        score = len(matching_keywords) / total_job_keywords
+    else:
+        score = 0.0
+
+    # return the main results in one dictionary
+    return {
+        "matching_keywords": matching_keywords,
+        "missing_keywords": missing_keywords,
+        "score": float(score),
+    }
+
+
+def tfidf_match(cv_text, job_text):
+    # turn the cv and job text into tf-idf vectors
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform([cv_text or "", job_text or ""])
+
+    # calculate cosine similarity between the two vectors
+    similarity = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+
+    # return the similarity score as a normal float
+    return float(similarity)
+
+
+def compare_matching_methods(cv_text, job_text):
+    # get the ats keyword match score
+    ats_result = ats_keyword_match(cv_text, job_text)
+    ats_score = ats_result.get("score", 0.0)
+
+    # get the tf-idf similarity score
+    tfidf_score = tfidf_match(cv_text, job_text)
+
+    # create embeddings for both texts and compare them
+    cv_embedding = generate_embedding(cv_text or "")
+    job_embedding = generate_embedding(job_text or "")
+    embedding_score = cosine_similarity([cv_embedding], [job_embedding])[0][0]
+
+    # return all method scores in one dictionary
+    return {
+        "ats_score": float(ats_score),
+        "tfidf_score": float(tfidf_score),
+        "embedding_score": float(embedding_score),
+    }
 
 
 def detect_intent(question: str) -> str:
