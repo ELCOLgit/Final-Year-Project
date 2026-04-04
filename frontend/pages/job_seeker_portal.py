@@ -151,13 +151,13 @@ if st.session_state.get("show_top_matches"):
 
             # user picks a top match, then clicks button to call /matches/search/{resume_id}
             selected_top_match = st.selectbox(
-                "click a top match to load search results",
+                "Click a top match to load search results",
                 top_matches,
                 format_func=lambda x: (
-                    f"{x.get('job_title', 'job')} "
+                    f"{x.get('job_title', 'Job')} "
                     f"({x.get('percentage_score', 0)}%, "
                     f"{x.get('rating_score', 0)}/10, "
-                    f"{x.get('match_label', 'no label')})"
+                    f"{x.get('match_label', 'No label')})"
                 ),
             )
 
@@ -185,13 +185,13 @@ search_matches = st.session_state.get("search_matches", [])
 search_resume_id = st.session_state.get("search_resume_id")
 
 if search_resume_id and search_matches is not None:
-    st.markdown("### search results")
+    st.markdown("### Search Results")
 
     if not search_matches:
         st.info("No search results to show.")
     else:
         for i, match in enumerate(search_matches):
-            title = match.get("title", "unknown")
+            title = match.get("title", "Unknown")
             percentage_score = match.get("percentage_score", 0)
             rating_score = match.get("rating_score", 0)
             match_label = match.get("match_label", "no label")
@@ -204,15 +204,15 @@ if search_resume_id and search_matches is not None:
             # show each match in a simple container
             with st.container(border=True):
                 st.subheader(title)
-                st.write(f"match score: {percentage_score}%")
-                st.write(f"rating: {rating_score}/10")
-                st.write(f"match label: {match_label}")
-                st.write(f"matching skills: {format_skills(matching_skills)}")
-                st.write(f"missing skills: {format_skills(missing_skills)}")
-                st.write(f"explanation: {explanation}")
+                st.write(f"Match Score: {percentage_score}%")
+                st.write(f"Rating: {rating_score}/10")
+                st.write(f"Match Label: {match_label}")
+                st.write(f"Matching Skills: {format_skills(matching_skills)}")
+                st.write(f"Missing Skills: {format_skills(missing_skills)}")
+                st.write(f"Explanation: {explanation}")
 
                 # when user clicks this, we show cv text vs job description
-                if st.button("compare cv with this job", key=f"compare_btn_{i}"):
+                if st.button("Compare CV with This Job", key=f"compare_btn_{i}"):
                     st.session_state["compare_job_id"] = job_id
                     st.session_state["compare_job_title"] = title
                     st.session_state["compare_match_data"] = match
@@ -269,13 +269,13 @@ if compare_job_id and search_resume_id:
                 unsafe_allow_html=True,
             )
 
-        st.markdown("### missing skills")
+        st.markdown("### Missing Skills")
         st.write(format_skills(missing_skills))
 
-        st.markdown("### matching skills")
+        st.markdown("### Matching Skills")
         st.write(format_skills(matching_skills))
 
-        st.markdown("### explanation")
+        st.markdown("### Explanation")
         st.write(explanation)
     else:
         st.error("Could not load resume/job text for comparison.")

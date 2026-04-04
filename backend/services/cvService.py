@@ -334,8 +334,8 @@ def explain_score(matching_skills, missing_skills, score, percentage_score, rati
 
     # build one simple explanation that always uses the real score values
     return (
-        f"this candidate is a {match_label} with a score of {percentage_score} percent, "
-        f"or {rating_score} out of 10. they match {matching_count} skills but are missing "
+        f"This candidate is a {match_label} with a score of {percentage_score} percent, "
+        f"or {rating_score} out of 10. They match {matching_count} skills but are missing "
         f"{missing_count} required skills."
     )
 
@@ -369,21 +369,21 @@ def generate_match_explanation(cv_text, job_text, final_score=None):
 
     if matching_text and missing_text:
         return (
-            f"this candidate is a {match_label} with a score of {rating_score} out of 10, "
-            f"or {percentage_score} percent. they match {matching_text}, but are missing "
+            f"This candidate is a {match_label} with a score of {rating_score} out of 10, "
+            f"or {percentage_score} percent. They match {matching_text}, but are missing "
             f"{missing_text}."
         )
 
     if matching_text:
         return (
-            f"this candidate is a {match_label} with a score of {rating_score} out of 10, "
-            f"or {percentage_score} percent. they match {matching_text} and cover most of the "
+            f"This candidate is a {match_label} with a score of {rating_score} out of 10, "
+            f"or {percentage_score} percent. They match {matching_text} and cover most of the "
             f"main job requirements."
         )
 
     return (
-        f"this candidate is a {match_label} with a score of {rating_score} out of 10, "
-        f"or {percentage_score} percent. they are missing {missing_text}, which lowers the match."
+        f"This candidate is a {match_label} with a score of {rating_score} out of 10, "
+        f"or {percentage_score} percent. They are missing {missing_text}, which lowers the match."
     )
 
 

@@ -15,7 +15,6 @@ if str(project_root) not in sys.path:
 
 from backend.services.cvService import (
     compare_matching_methods,
-    generate_match_explanation,
     multi_step_match_analysis,
 )
 
@@ -46,6 +45,33 @@ def get_match_label(score):
     if score >= 0.5:
         return "moderate match"
     return "weak match"
+
+
+def build_comparison_explanation(embedding_score, match_label, matching_skills, missing_skills):
+    # build a short explanation using the real final ai score
+    percentage_score = round(embedding_score * 100)
+    matching_text = format_skills(matching_skills[:3])
+    missing_text = format_skills(missing_skills[:3])
+
+    if matching_skills and missing_skills:
+        return (
+            f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent. "
+            f"They match {matching_text}, but are missing {missing_text}."
+        )
+
+    if matching_skills:
+        return (
+            f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent. "
+            f"They match {matching_text}."
+        )
+
+    if missing_skills:
+        return (
+            f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent. "
+            f"They are missing {missing_text}."
+        )
+
+    return f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent."
 
 
 def fetch_json(url, headers=None, timeout=20):
@@ -234,12 +260,13 @@ def load_comparison_results(job_id, candidates, headers):
         method_scores = compare_matching_methods(cv_text, job_text)
         analysis = multi_step_match_analysis(cv_text, job_text)
         embedding_score = method_scores.get("embedding_score", 0.0)
-
-        # support both the old and new explanation function signatures
-        try:
-            explanation = generate_match_explanation(cv_text, job_text, embedding_score)
-        except TypeError:
-            explanation = generate_match_explanation(cv_text, job_text)
+        match_label = get_match_label(embedding_score)
+        explanation = build_comparison_explanation(
+            embedding_score,
+            match_label,
+            analysis.get("matching_skills", []),
+            analysis.get("missing_skills", []),
+        )
 
         comparison_results.append({
             "filename": candidate.get("filename", "unknown cv"),
@@ -247,7 +274,7 @@ def load_comparison_results(job_id, candidates, headers):
             "ats_score": method_scores.get("ats_score", 0.0),
             "tfidf_score": method_scores.get("tfidf_score", 0.0),
             "embedding_score": embedding_score,
-            "match_label": get_match_label(embedding_score),
+            "match_label": match_label,
             "matching_skills": analysis.get("matching_skills", []),
             "missing_skills": analysis.get("missing_skills", []),
             "explanation": explanation,
@@ -495,7 +522,7 @@ with ranking_tab:
                 if ranking_error:
                     st.error(ranking_error)
                 elif not candidate_rankings:
-                    st.info("no ranked candidates yet.")
+                    st.info("No ranked candidates yet.")
                 else:
                     ranking_resume_ids = [candidate["resume_id"] for candidate in candidate_rankings]
                     if st.session_state["viewer_resume_id"] not in ranking_resume_ids:
@@ -517,7 +544,7 @@ with ranking_tab:
         if resumes_error:
             st.error(resumes_error)
         elif not resumes:
-            st.info("no resumes uploaded yet")
+            st.info("No resumes uploaded yet.")
         else:
             # sort candidate options alphabetically for the cv viewer
             resume_ids = sorted(
@@ -586,7 +613,7 @@ with comparison_tab:
         if jobs_error:
             st.error(jobs_error)
         elif not jobs:
-            st.info("upload or import a job first to compare candidates")
+            st.info("Upload or import a job first to compare candidates.")
         else:
             # sort job options alphabetically for the comparison dropdown
             comparison_job_ids = sorted(
@@ -609,7 +636,7 @@ with comparison_tab:
             if comparison_error:
                 st.error(comparison_error)
             elif not comparison_candidates:
-                st.info("no candidate matches available for this job yet")
+                st.info("No candidate matches are available for this job yet.")
             else:
                 comparison_results, load_error = load_comparison_results(
                     comparison_job_id,
@@ -620,7 +647,7 @@ with comparison_tab:
                 if load_error:
                     st.error(load_error)
                 elif not comparison_results:
-                    st.info("no comparison results available yet")
+                    st.info("No comparison results are available yet.")
                 else:
                     for result in comparison_results:
                         with st.container(border=True):
@@ -647,7 +674,7 @@ with comparison_tab:
                             score_col_3.metric("Embedding Score", f"{round(result['embedding_score'] * 100)}%")
 
                             # keep the detailed reasoning inside an expander
-                            with st.expander("view details"):
+                            with st.expander("View Details"):
                                 st.markdown("**Matching Skills**")
                                 st.write(format_skills(result["matching_skills"]))
 
