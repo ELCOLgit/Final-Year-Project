@@ -35,8 +35,14 @@ def generate_response(intent, context_data):
     missing_skills = context_data.get("missing_skills", [])
     suggestions = context_data.get("suggestions", [])
     match_score = context_data.get("match_score")
+    percentage_score = context_data.get("percentage_score")
+    rating_score = context_data.get("rating_score")
+    match_label = context_data.get("match_label")
     best_candidate_name = context_data.get("best_candidate_name")
     best_candidate_score = context_data.get("best_candidate_score")
+    best_candidate_percentage_score = context_data.get("best_candidate_percentage_score")
+    best_candidate_rating_score = context_data.get("best_candidate_rating_score")
+    best_candidate_match_label = context_data.get("best_candidate_match_label")
 
     if intent == "skills_in_cv":
         if cv_skills:
@@ -71,11 +77,11 @@ def generate_response(intent, context_data):
         return f"I could not compare the CV against the job requirements for {job_title}."
 
     if intent == "best_candidate":
-        if best_candidate_name and job_title and best_candidate_score is not None:
+        if best_candidate_name and job_title and best_candidate_percentage_score is not None:
             responses = [
-                f"Based on the stored similarity scores, {best_candidate_name} is currently the strongest match for {job_title} with a score of {best_candidate_score:.3f}.",
-                f"Looking at the saved match results, {best_candidate_name} stands out as the top candidate for {job_title} with a score of {best_candidate_score:.3f}.",
-                f"Right now, {best_candidate_name} appears to be the best fit for {job_title}, with a similarity score of {best_candidate_score:.3f}.",
+                f"Based on the stored match results, {best_candidate_name} is currently the top candidate for {job_title} with a {best_candidate_match_label} of {best_candidate_percentage_score} percent.",
+                f"Looking at the saved rankings, {best_candidate_name} stands out for {job_title} with a rating of {best_candidate_rating_score} out of 10.",
+                f"Right now, {best_candidate_name} appears to be the best fit for {job_title} with a score of {best_candidate_percentage_score} percent.",
             ]
             return random.choice(responses)
         if best_candidate_name and job_title:
@@ -88,29 +94,29 @@ def generate_response(intent, context_data):
         return "I could not find a ranked candidate for the selected job."
 
     if intent == "explain_match":
-        if match_score is not None and cv_skills and job_skills:
+        if percentage_score is not None and cv_skills and job_skills:
             shared_skills = [skill for skill in cv_skills if skill in job_skills]
             shared_text = _format_list(shared_skills[:3]) if shared_skills else "no direct skill overlap"
             responses = [
-                f"{candidate_name} has a match score of {match_score:.3f} for {job_title}, based on overlap in skills such as {shared_text}.",
-                f"The score of {match_score:.3f} for {candidate_name} comes from shared skills with {job_title}, including {shared_text}.",
-                f"{candidate_name} scored {match_score:.3f} for {job_title} because the CV aligns with the role in areas like {shared_text}.",
+                f"{candidate_name} is a {match_label} for {job_title} with a score of {percentage_score} percent, based on overlap in skills such as {shared_text}.",
+                f"The score for {candidate_name} is {rating_score} out of 10 for {job_title}, with shared skills including {shared_text}.",
+                f"{candidate_name} has a {match_label} for {job_title} because the CV aligns with the role in areas like {shared_text}.",
             ]
             return random.choice(responses)
-        if match_score is not None:
+        if percentage_score is not None:
             responses = [
-                f"{candidate_name} currently has a match score of {match_score:.3f} for {job_title}.",
-                f"The saved score for {candidate_name} against {job_title} is {match_score:.3f}.",
-                f"Right now, {candidate_name} has a similarity score of {match_score:.3f} for {job_title}.",
+                f"{candidate_name} currently has a {match_label} for {job_title} with a score of {percentage_score} percent.",
+                f"The saved score for {candidate_name} against {job_title} is {rating_score} out of 10.",
+                f"Right now, {candidate_name} has a match score of {percentage_score} percent for {job_title}.",
             ]
             return random.choice(responses)
         return f"I could not find a saved match score for {candidate_name} and {job_title}."
 
-    if match_score is not None and job_title != "this role":
+    if percentage_score is not None and job_title != "this role":
         responses = [
-            f"{candidate_name} currently has a match score of {match_score:.3f} for {job_title}.",
-            f"The current similarity score for {candidate_name} and {job_title} is {match_score:.3f}.",
-            f"For {job_title}, {candidate_name} has a saved match score of {match_score:.3f}.",
+            f"{candidate_name} currently has a {match_label} for {job_title} with a score of {percentage_score} percent.",
+            f"The current rating for {candidate_name} and {job_title} is {rating_score} out of 10.",
+            f"For {job_title}, {candidate_name} has a saved score of {percentage_score} percent.",
         ]
         return random.choice(responses)
 
@@ -184,58 +190,107 @@ def multi_step_match_analysis(cv_text, job_text):
     missing_skills = compare_skills(cv_skills, job_skills)
     print("missing skills:", missing_skills)
 
-    # step 5: calculate a simple match score
-    if job_skills:
-        score = len(matching_skills) / len(job_skills)
-    else:
-        score = 0.0
-    print("score:", float(score))
+    # step 5: count the main values used in scoring
+    match_count = len(matching_skills)
+    missing_count = len(missing_skills)
+    total_job_skills = len(job_skills)
 
-    # step 6: return all results in one dictionary
+    print("match count:", match_count)
+    print("missing count:", missing_count)
+    print("total job skills:", total_job_skills)
+
+    # step 6: create the base score from job skill coverage
+    if total_job_skills > 0:
+        base_score = match_count / total_job_skills
+    else:
+        base_score = 0.0
+
+    # step 7: add a small bonus for stronger overlap
+    bonus = 0.0
+    if match_count >= 5:
+        bonus = 0.15
+    elif match_count >= 3:
+        bonus = 0.10
+    elif match_count >= 1:
+        bonus = 0.05
+
+    # step 8: add a small penalty for too many missing skills
+    penalty = 0.0
+    if missing_count >= 6:
+        penalty = 0.10
+    elif missing_count >= 4:
+        penalty = 0.05
+
+    # step 9: combine everything into the final score
+    score = base_score + bonus - penalty
+
+    # keep the score between 0 and 1
+    if score > 1:
+        score = 1.0
+    if score < 0:
+        score = 0.0
+
+    # create simpler score formats for the ui
+    percentage_score = round(score * 100)
+    rating_score = round(score * 10)
+
+    # add a simple label for the match strength
+    if score >= 0.75:
+        match_label = "strong match"
+    elif score >= 0.45:
+        match_label = "moderate match"
+    else:
+        match_label = "weak match"
+
+    print("base score:", float(base_score))
+    print("bonus:", float(bonus))
+    print("penalty:", float(penalty))
+    print("score:", float(score))
+    print("percentage score:", percentage_score)
+    print("rating score:", rating_score)
+    print("match label:", match_label)
+
+    # step 10: return all results in one dictionary
     return {
         "matching_skills": matching_skills,
         "missing_skills": missing_skills,
         "score": float(score),
+        "percentage_score": percentage_score,
+        "rating_score": rating_score,
+        "match_label": match_label,
     }
 
 
-def explain_score(matching_skills, missing_skills, score):
+def explain_score(matching_skills, missing_skills, score, percentage_score, rating_score, match_label):
     # count the number of matching and missing skills
     matching_count = len(matching_skills or [])
     missing_count = len(missing_skills or [])
 
-    # build readable skill text for the explanation
-    matching_text = _format_list((matching_skills or [])[:3])
-    missing_text = _format_list((missing_skills or [])[:3])
-
-    # explain the score using simple score bands
-    if score > 0.7:
-        if matching_text:
+    # build a more natural explanation using the new score fields
+    if match_label == "strong match":
+        if missing_count == 0:
             return (
-                f"This candidate is a strong match because they meet most of the required skills, "
-                f"including {matching_text}. They have {matching_count} matching skills and "
-                f"{missing_count} missing skills."
+                f"this candidate is a strong match with a score of {percentage_score} percent "
+                f"and a rating of {rating_score} out of 10. they match {matching_count} important "
+                f"skills and meet most of the main job requirements."
             )
         return (
-            f"This candidate is a strong match because they meet most of the required skills. "
-            f"They have {matching_count} matching skills and {missing_count} missing skills."
+            f"this candidate is a strong match with a score of {percentage_score} percent "
+            f"and a rating of {rating_score} out of 10. they match {matching_count} important "
+            f"skills and are only missing {missing_count} skills from the job."
         )
 
-    if 0.4 <= score <= 0.7:
-        if missing_text:
-            return (
-                f"This candidate is a moderate match. They meet some requirements but are missing "
-                f"skills like {missing_text}. They have {matching_count} matching skills and "
-                f"{missing_count} missing skills."
-            )
+    if match_label == "moderate match":
         return (
-            f"This candidate is a moderate match. They meet some of the role requirements. "
-            f"They have {matching_count} matching skills and {missing_count} missing skills."
+            f"this candidate is a moderate match with a score of {percentage_score} percent "
+            f"and a rating of {rating_score} out of 10. they match {matching_count} important "
+            f"skills but are missing {missing_count} skills from the job."
         )
 
     return (
-        f"This candidate is a weak match because they are missing several key skills required for "
-        f"this role. They have {matching_count} matching skills and {missing_count} missing skills."
+        f"this candidate is a weak match with a score of {percentage_score} percent "
+        f"and a rating of {rating_score} out of 10. they match {matching_count} important "
+        f"skills and are missing {missing_count} skills from the job."
     )
 
 
@@ -247,45 +302,42 @@ def generate_match_explanation(cv_text, job_text):
     matching_skills = analysis.get("matching_skills", [])
     missing_skills = analysis.get("missing_skills", [])
     score = analysis.get("score", 0.0)
-
-    # count total required skills from the analysis results
-    matching_count = len(matching_skills)
-    missing_count = len(missing_skills)
-    total_job_skills = matching_count + missing_count
-
-    # choose a simple overall label for the score
-    if score > 0.7:
-        overall_text = "a strong match"
-    elif score >= 0.4:
-        overall_text = "a moderate match"
-    else:
-        overall_text = "a weak match"
+    percentage_score = analysis.get("percentage_score", 0)
+    rating_score = analysis.get("rating_score", 0)
+    match_label = analysis.get("match_label", "weak match")
 
     # build readable skill text
     matching_text = _format_list(matching_skills[:3])
     missing_text = _format_list(missing_skills[:3])
 
-    if total_job_skills == 0:
-        return "I could not identify any required job skills, so a clear match explanation is not available."
+    # use the simpler score explanation if we have no skill text
+    if not matching_skills and not missing_skills:
+        return explain_score(
+            matching_skills,
+            missing_skills,
+            score,
+            percentage_score,
+            rating_score,
+            match_label,
+        )
 
     if matching_text and missing_text:
         return (
-            f"This candidate matches {matching_count} out of {total_job_skills} required skills, "
-            f"including {matching_text}. However, they are missing {missing_text}, which lowers "
-            f"the score. Overall, this is {overall_text}."
+            f"this candidate is a {match_label} with a score of {rating_score} out of 10, "
+            f"or {percentage_score} percent. they match {matching_text}, but are missing "
+            f"{missing_text}."
         )
 
     if matching_text:
         return (
-            f"This candidate matches {matching_count} out of {total_job_skills} required skills, "
-            f"including {matching_text}. They cover most of the identified requirements. Overall, "
-            f"this is {overall_text}."
+            f"this candidate is a {match_label} with a score of {rating_score} out of 10, "
+            f"or {percentage_score} percent. they match {matching_text} and cover most of the "
+            f"main job requirements."
         )
 
     return (
-        f"This candidate matches {matching_count} out of {total_job_skills} required skills. They "
-        f"are missing {missing_count} identified job skills, which lowers the score. Overall, this "
-        f"is {overall_text}."
+        f"this candidate is a {match_label} with a score of {rating_score} out of 10, "
+        f"or {percentage_score} percent. they are missing {missing_text}, which lowers the match."
     )
 
 

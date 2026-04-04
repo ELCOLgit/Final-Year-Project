@@ -25,6 +25,24 @@ def get_db():
         db.close()
 
 
+def build_score_data(score):
+    # add a simple label for the match strength
+    if score > 0.7:
+        match_label = "strong match"
+    elif score >= 0.4:
+        match_label = "moderate match"
+    else:
+        match_label = "weak match"
+
+    # keep the original score and also add simpler display formats
+    return {
+        "score": score,
+        "percentage_score": int(score * 100),
+        "rating_score": round(score * 10),
+        "match_label": match_label,
+    }
+
+
 @router.get("/")
 def get_user_matches(
     current_user: User = Depends(get_current_user),
@@ -42,7 +60,7 @@ def get_user_matches(
             "id": m.id,
             "resume": m.resume.filename,
             "job_title": m.job_posting.title,
-            "score": m.match_score,
+            **build_score_data(m.match_score),
             "created_at": m.created_at,
             "generated_at": m.generated_at,
         }
@@ -70,7 +88,7 @@ def get_top_matches(
             results.append({
                 "resume": r.filename,
                 "job_title": top.job_posting.title,
-                "score": top.match_score,
+                **build_score_data(top.match_score),
                 "generated_at": top.generated_at
             })
 
@@ -93,7 +111,7 @@ def get_matches_for_resume(
         {
             "job_id": m.job_posting.id,
             "job_title": m.job_posting.title,
-            "score": round(m.match_score, 3),
+            **build_score_data(m.match_score),
             "generated_at": m.generated_at
         }
         for m in matches
@@ -109,7 +127,7 @@ def debug_matches(db: Session = Depends(get_db)):
             "user_id": m.user_id,
             "resume": m.resume.filename,
             "job_title": m.job_posting.title,
-            "score": m.match_score,
+            **build_score_data(m.match_score),
         }
         for m in matches
     ]
@@ -134,7 +152,7 @@ def get_matches_for_job(
             "resume_id": m.resume.id,
             "filename": m.resume.filename,
             "user_id": m.resume.user_id,
-            "score": round(m.match_score, 3),
+            **build_score_data(m.match_score),
             "generated_at": m.generated_at,
             "skills": extract_skills_from_text(m.resume.text_content or ""),
         }
@@ -239,7 +257,7 @@ def search_matches_for_resume(
 
         matches.append({
             "id": saved_match.id,
-            "score": ranked_score,
+            **build_score_data(ranked_score),
             "faiss_score": faiss_score,
             "skill_match_score": skill_score,
             "job_id": job.id,

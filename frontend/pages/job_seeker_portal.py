@@ -133,7 +133,12 @@ if st.session_state.get("show_top_matches"):
             selected_top_match = st.selectbox(
                 "click a top match to load search results",
                 top_matches,
-                format_func=lambda x: f"{x.get('job_title', 'job')} (score: {x.get('score', 0):.3f})",
+                format_func=lambda x: (
+                    f"{x.get('job_title', 'job')} "
+                    f"({x.get('percentage_score', 0)}%, "
+                    f"{x.get('rating_score', 0)}/10, "
+                    f"{x.get('match_label', 'no label')})"
+                ),
             )
 
             selected_resume_name = selected_top_match.get("resume")
@@ -167,7 +172,9 @@ if search_resume_id and search_matches is not None:
     else:
         for i, match in enumerate(search_matches):
             title = match.get("title", "unknown")
-            score = float(match.get("score", 0.0))
+            percentage_score = match.get("percentage_score", 0)
+            rating_score = match.get("rating_score", 0)
+            match_label = match.get("match_label", "no label")
             job_id = match.get("job_id")
             reasoning = match.get("reasoning", {})
             matching_skills = reasoning.get("matching_skills", [])
@@ -177,7 +184,9 @@ if search_resume_id and search_matches is not None:
             # show each match in a simple container
             with st.container(border=True):
                 st.subheader(title)
-                st.write(f"score: {score:.3f}")
+                st.write(f"match score: {percentage_score}%")
+                st.write(f"rating: {rating_score}/10")
+                st.write(f"match label: {match_label}")
                 st.write(f"matching skills: {format_skills(matching_skills)}")
                 st.write(f"missing skills: {format_skills(missing_skills)}")
                 st.write(f"explanation: {explanation}")

@@ -30,6 +30,31 @@ def get_db():
         db.close()
 
 
+def build_score_data(score):
+    # keep the raw score and add simpler display values
+    if score is None:
+        return {
+            "match_score": None,
+            "percentage_score": None,
+            "rating_score": None,
+            "match_label": None,
+        }
+
+    if score > 0.7:
+        match_label = "strong match"
+    elif score >= 0.4:
+        match_label = "moderate match"
+    else:
+        match_label = "weak match"
+
+    return {
+        "match_score": score,
+        "percentage_score": int(score * 100),
+        "rating_score": round(score * 10),
+        "match_label": match_label,
+    }
+
+
 @router.post("/query/")
 def query_recruiter_ai(
     payload: RecruiterQuestion,
@@ -80,6 +105,11 @@ def query_recruiter_ai(
             .first()
         )
 
+    selected_score = selected_match.match_score if selected_match else (top_match.match_score if top_match else None)
+    best_candidate_score = top_match.match_score if top_match else None
+    selected_score_data = build_score_data(selected_score)
+    best_score_data = build_score_data(best_candidate_score)
+
     context_data = {
         "candidate_name": resume.filename if resume else "this candidate",
         "job_title": job.title if job else "this role",
@@ -89,9 +119,15 @@ def query_recruiter_ai(
         "job_skills": job_skills,
         "missing_skills": missing_skills,
         "suggestions": suggestions,
-        "match_score": selected_match.match_score if selected_match else (top_match.match_score if top_match else None),
+        "match_score": selected_score_data["match_score"],
+        "percentage_score": selected_score_data["percentage_score"],
+        "rating_score": selected_score_data["rating_score"],
+        "match_label": selected_score_data["match_label"],
         "best_candidate_name": top_match.resume.filename if top_match and top_match.resume else None,
-        "best_candidate_score": top_match.match_score if top_match else None,
+        "best_candidate_score": best_score_data["match_score"],
+        "best_candidate_percentage_score": best_score_data["percentage_score"],
+        "best_candidate_rating_score": best_score_data["rating_score"],
+        "best_candidate_match_label": best_score_data["match_label"],
     }
 
     intent = detect_intent(question)
@@ -103,10 +139,16 @@ def query_recruiter_ai(
         "cv_skills": cv_skills,
         "job_skills": job_skills,
         "match_score": context_data["match_score"],
+        "percentage_score": context_data["percentage_score"],
+        "rating_score": context_data["rating_score"],
+        "match_label": context_data["match_label"],
         "resume_id": payload.resume_id,
         "job_id": payload.job_id,
         "best_candidate_name": context_data["best_candidate_name"],
         "best_candidate_score": context_data["best_candidate_score"],
+        "best_candidate_percentage_score": context_data["best_candidate_percentage_score"],
+        "best_candidate_rating_score": context_data["best_candidate_rating_score"],
+        "best_candidate_match_label": context_data["best_candidate_match_label"],
         "missing_skills": missing_skills,
         "suggestions": suggestions,
         "candidate_name": context_data["candidate_name"],

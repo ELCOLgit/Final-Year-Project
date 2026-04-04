@@ -107,7 +107,9 @@ def summary_card(title, value, text):
 
 
 def ranking_card(candidate, rank_number):
-    score = float(candidate.get("score", 0.0))
+    percentage_score = candidate.get("percentage_score", 0)
+    rating_score = candidate.get("rating_score", 0)
+    match_label = candidate.get("match_label", "no label")
     skill_text = ", ".join(candidate.get("skills", [])) or "no skills found"
     return f"""
     <div style="
@@ -142,7 +144,7 @@ def ranking_card(candidate, rank_number):
                 font-size:0.8rem;
                 white-space:nowrap;
             ">
-                score {score:.3f}
+                {percentage_score}% | {rating_score}/10 | {match_label}
             </div>
         </div>
     </div>
@@ -320,7 +322,7 @@ with dashboard_tab:
                 score_df = pd.DataFrame(
                     {
                         "candidate": [item["filename"] for item in dashboard_rankings[:5]],
-                        "score": [item["score"] for item in dashboard_rankings[:5]],
+                        "percentage score": [item.get("percentage_score", 0) for item in dashboard_rankings[:5]],
                     }
                 ).set_index("candidate")
                 st.bar_chart(score_df)
