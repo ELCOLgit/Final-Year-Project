@@ -4,7 +4,7 @@ import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from backend.nlp.skills_extractor import compare_skills, extract_skills_from_text
+from backend.nlp.skills_extractor import compare_normalized_skills, compare_skills, extract_skills_from_text
 from backend.nlp.improvement_suggestions import generate_suggestions
 from backend.utils.embedding_utils import generate_embedding
 
@@ -73,6 +73,75 @@ def get_match_label(score):
     if score >= 0.5:
         return "moderate match"
     return "weak match"
+
+
+def clamp_score(score):
+    # keep scores inside the valid range for the ui and database
+    if score < 0:
+        return 0.0
+    if score > 1:
+        return 1.0
+    return float(score)
+
+
+def build_match_score_data(final_score):
+    # create the shared score fields used by the frontend
+    clamped_score = clamp_score(final_score)
+
+    return {
+        "final_score": clamped_score,
+        "percentage_score": round(clamped_score * 100),
+        "rating_score": round(clamped_score * 10),
+        "match_label": get_match_label(clamped_score),
+    }
+
+
+def calculate_hybrid_match_score(embedding_score, matching_skills, missing_skills, job_skills):
+    # count the skill values used in the hybrid formula
+    matching_count = len(matching_skills or [])
+    missing_count = len(missing_skills or [])
+    total_job_skills = len(job_skills or [])
+
+    # calculate how much of the job skill list is covered
+    if total_job_skills > 0:
+        skill_overlap_score = matching_count / total_job_skills
+    else:
+        skill_overlap_score = 0.0
+
+    # apply a simple penalty when more important skills are missing
+    penalty = 0.0
+    if missing_count >= 5:
+        penalty = 0.15
+    elif missing_count >= 3:
+        penalty = 0.10
+    elif missing_count >= 1:
+        penalty = 0.05
+
+    # combine semantic similarity with skill coverage
+    final_score = (float(embedding_score) * 0.6) + (skill_overlap_score * 0.4) - penalty
+
+    # add a small reward for stronger real overlap
+    if matching_count >= 6:
+        final_score += 0.08
+    elif matching_count >= 4:
+        final_score += 0.05
+
+    # make sure zero overlap does not rank too highly
+    if matching_count == 0:
+        final_score -= 0.15
+        final_score = min(final_score, 0.49)
+
+    score_data = build_match_score_data(final_score)
+
+    return {
+        "embedding_score": float(embedding_score),
+        "skill_overlap_score": float(skill_overlap_score),
+        "penalty": float(penalty),
+        "matching_count": matching_count,
+        "missing_count": missing_count,
+        "total_job_skills": total_job_skills,
+        **score_data,
+    }
 
 
 def detect_intent(question: str) -> str:
@@ -207,12 +276,15 @@ def explain_match(cv_text, job_text, score):
     # extract simple skill lists from the cv and job text
     cv_skills = extract_skills_from_text(cv_text or "")
     job_skills = extract_skills_from_text(job_text or "")
-    shared_skills = [skill for skill in cv_skills if skill in job_skills]
-    missing_skills = compare_skills(cv_skills, job_skills)
+    skill_comparison = compare_normalized_skills(cv_skills, job_skills)
+    shared_skills = skill_comparison.get("matching_skills", [])
+    missing_skills = skill_comparison.get("missing_skills", [])
     suggestions = generate_suggestions(cv_text or "", job_text or "", missing_skills)
 
     # describe the strength of the score in simple language
-    if score >= 0.75:
+    if not shared_skills:
+        score_text = "a weak match"
+    elif score >= 0.75:
         score_text = "a strong match"
     elif score >= 0.45:
         score_text = "a moderate match"
@@ -227,7 +299,7 @@ def explain_match(cv_text, job_text, score):
         )
     else:
         explanation = (
-            f"This candidate is {score_text} because there is limited overlap "
+            f"This candidate is {score_text} because there are no clear matching skills "
             f"between the extracted CV skills and the job requirements."
         )
 
@@ -244,7 +316,7 @@ def explain_match(cv_text, job_text, score):
     return explanation
 
 
-def multi_step_match_analysis(cv_text, job_text):
+def multi_step_match_analysis(cv_text, job_text, embedding_score=0.0):
     # step 1: extract skills from the cv
     cv_skills = extract_skills_from_text(cv_text or "")
     print("extracted cv skills:", cv_skills)
@@ -253,90 +325,78 @@ def multi_step_match_analysis(cv_text, job_text):
     job_skills = extract_skills_from_text(job_text or "")
     print("extracted job skills:", job_skills)
 
-    # step 3: find matching skills
-    matching_skills = [skill for skill in cv_skills if skill in job_skills]
+    # step 3: compare normalized skill lists
+    skill_comparison = compare_normalized_skills(cv_skills, job_skills)
+    matching_skills = skill_comparison.get("matching_skills", [])
     print("matching skills:", matching_skills)
 
     # step 4: find missing skills
-    missing_skills = compare_skills(cv_skills, job_skills)
+    missing_skills = skill_comparison.get("missing_skills", [])
     print("missing skills:", missing_skills)
 
-    # step 5: count the main values used in scoring
-    match_count = len(matching_skills)
-    missing_count = len(missing_skills)
-    total_job_skills = len(job_skills)
+    # step 5: calculate one shared hybrid score for this match
+    score_data = calculate_hybrid_match_score(
+        embedding_score,
+        matching_skills,
+        missing_skills,
+        job_skills,
+    )
 
-    print("match count:", match_count)
-    print("missing count:", missing_count)
-    print("total job skills:", total_job_skills)
+    print("matching count:", score_data["matching_count"])
+    print("missing count:", score_data["missing_count"])
+    print("total job skills:", score_data["total_job_skills"])
+    print("embedding score:", score_data["embedding_score"])
+    print("skill overlap score:", score_data["skill_overlap_score"])
+    print("penalty:", score_data["penalty"])
+    print("final score:", score_data["final_score"])
+    print("percentage score:", score_data["percentage_score"])
+    print("rating score:", score_data["rating_score"])
+    print("match label:", score_data["match_label"])
 
-    # step 6: create the base score from job skill coverage
-    if total_job_skills > 0:
-        base_score = match_count / total_job_skills
-    else:
-        base_score = 0.0
-
-    # step 7: add a small bonus for stronger overlap
-    bonus = 0.0
-    if match_count >= 5:
-        bonus = 0.15
-    elif match_count >= 3:
-        bonus = 0.10
-    elif match_count >= 1:
-        bonus = 0.05
-
-    # step 8: add a small penalty for too many missing skills
-    penalty = 0.0
-    if missing_count >= 6:
-        penalty = 0.10
-    elif missing_count >= 4:
-        penalty = 0.05
-
-    # step 9: combine everything into the final score
-    score = base_score + bonus - penalty
-
-    # keep the score between 0 and 1
-    if score > 1:
-        score = 1.0
-    if score < 0:
-        score = 0.0
-
-    # create simpler score formats for the ui
-    percentage_score = round(score * 100)
-    rating_score = round(score * 10)
-
-    # keep a simple label here for the analysis result
-    match_label = get_match_label(score)
-
-    print("base score:", float(base_score))
-    print("bonus:", float(bonus))
-    print("penalty:", float(penalty))
-    print("score:", float(score))
-    print("percentage score:", percentage_score)
-    print("rating score:", rating_score)
-    print("match label:", match_label)
-
-    # step 10: return all results in one dictionary
+    # step 6: return all results in one dictionary
     return {
         "matching_skills": matching_skills,
         "missing_skills": missing_skills,
-        "score": float(score),
-        "percentage_score": percentage_score,
-        "rating_score": rating_score,
-        "match_label": match_label,
+        "normalized_cv_skills": skill_comparison.get("normalized_cv_skills", []),
+        "normalized_job_skills": skill_comparison.get("normalized_job_skills", []),
+        **score_data,
     }
 
 
-def explain_score(matching_skills, missing_skills, score, percentage_score, rating_score, match_label):
-    # count the number of matching and missing skills
-    matching_count = len(matching_skills or [])
-    missing_count = len(missing_skills or [])
+def build_hybrid_score_explanation(percentage_score, rating_score, match_label, matching_skills, missing_skills):
+    # build one honest explanation from the shared hybrid score fields
+    matching_skills = sorted(set(matching_skills or []))
+    missing_skills = sorted(set(missing_skills or []))
 
-    # build one simple explanation that always uses the real score values
+    if not matching_skills:
+        if missing_skills:
+            missing_text = _format_list(missing_skills[:3])
+            return (
+                f"This candidate is a weak match with a score of {percentage_score} percent "
+                f"and a rating of {rating_score} out of 10. There are no clear matching skills, "
+                f"and they are still missing skills such as {missing_text}, which keeps the score low."
+            )
+
+        return (
+            f"This candidate is a weak match with a score of {percentage_score} percent "
+            f"and a rating of {rating_score} out of 10. There are no clear matching skills, "
+            f"so the result stays in the weak match range."
+        )
+
+    matching_text = _format_list(matching_skills[:3])
+
+    if missing_skills:
+        missing_text = _format_list(missing_skills[:3])
+        return (
+            f"This candidate is a {match_label} with a score of {percentage_score} percent "
+            f"and a rating of {rating_score} out of 10. They match important skills like "
+            f"{matching_text}, but are missing {missing_text}, which lowers the overall score."
+        )
+
     return (
-        f"This candidate is a {match_label} with a score of {percentage_score} percent, "
-        f"or {rating_score} out of 10. They match {matching_count} skills but are missing "
-        f"{missing_count} required skills."
+        f"This candidate is a {match_label} with a score of {percentage_score} percent "
+        f"and a rating of {rating_score} out of 10. Their strongest matching skills include "
+        f"{matching_text}, and there are no clear missing skills in the extracted job requirements."
     )
 
 
@@ -347,43 +407,17 @@ def generate_match_explanation(cv_text, job_text, final_score=None):
     # get the main values from the analysis
     matching_skills = analysis.get("matching_skills", [])
     missing_skills = analysis.get("missing_skills", [])
-    score = float(final_score) if final_score is not None else analysis.get("score", 0.0)
+    score = float(final_score) if final_score is not None else analysis.get("final_score", 0.0)
     percentage_score = round(score * 100)
     rating_score = round(score * 10)
     match_label = get_match_label(score)
 
-    # build readable skill text
-    matching_text = _format_list(matching_skills[:3])
-    missing_text = _format_list(missing_skills[:3])
-
-    # use the simpler score explanation if we have no skill text
-    if not matching_skills and not missing_skills:
-        return explain_score(
-            matching_skills,
-            missing_skills,
-            score,
-            percentage_score,
-            rating_score,
-            match_label,
-        )
-
-    if matching_text and missing_text:
-        return (
-            f"This candidate is a {match_label} with a score of {rating_score} out of 10, "
-            f"or {percentage_score} percent. They match {matching_text}, but are missing "
-            f"{missing_text}."
-        )
-
-    if matching_text:
-        return (
-            f"This candidate is a {match_label} with a score of {rating_score} out of 10, "
-            f"or {percentage_score} percent. They match {matching_text} and cover most of the "
-            f"main job requirements."
-        )
-
-    return (
-        f"This candidate is a {match_label} with a score of {rating_score} out of 10, "
-        f"or {percentage_score} percent. They are missing {missing_text}, which lowers the match."
+    return build_hybrid_score_explanation(
+        percentage_score,
+        rating_score,
+        match_label,
+        matching_skills,
+        missing_skills,
     )
 
 

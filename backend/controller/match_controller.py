@@ -245,16 +245,13 @@ def search_matches_for_resume(
 
         # read job text and metadata so we can build a richer response
         job_text = job.description or ""
-        analysis = multi_step_match_analysis(cv_text, job_text)
-        faiss_score = float(result.get("score", 0.0))
-        skill_score = float(analysis.get("score", 0.0))
+        embedding_score = float(result.get("score", 0.0))
+        analysis = multi_step_match_analysis(cv_text, job_text, embedding_score=embedding_score)
+        final_score = float(analysis.get("final_score", 0.0))
         matching_skills = analysis.get("matching_skills", [])
         missing_skills = analysis.get("missing_skills", [])
 
-        # use the embedding score as the final score shown in the ui
-        final_score = round(faiss_score, 3)
-
-        # save or update the final embedding score in the database
+        # save or update the final hybrid score in the database
         saved_match = (
             db.query(Match)
             .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
@@ -281,11 +278,12 @@ def search_matches_for_resume(
         matches.append({
             "id": saved_match.id,
             **build_score_data(final_score),
-            "faiss_score": faiss_score,
-            "skill_match_score": skill_score,
+            "embedding_score": embedding_score,
+            "skill_overlap_score": analysis.get("skill_overlap_score", 0.0),
+            "final_score": final_score,
             "job_id": job.id,
             "title": job.title,
-            "similarity_score": faiss_score,
+            "similarity_score": embedding_score,
             "description_preview": description_preview,
             "reasoning": {
                 "matching_skills": matching_skills,
