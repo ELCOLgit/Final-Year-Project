@@ -3,9 +3,13 @@ from sqlalchemy.orm import Session
 from backend.database import SessionLocal, DATABASE_URL
 from backend.models.resume_model import Resume
 from backend.models.user_model import User
+from backend.nlp.preprocessing import preprocess_text
 from backend.utils.dependencies import get_current_user
+from backend.utils.embedding_utils import generate_embedding
+from backend.vectorStore.resume_faiss_index import add_vector as add_resume_vector
 import fitz
 from datetime import datetime
+import json
 import os
 
 router = APIRouter(
@@ -50,21 +54,26 @@ async def upload_resume(
     if not user:
         raise HTTPException(status_code=404, detail="Authenticated user not found")
 
-    # Extract resume text
-    text_content = extract_text_from_pdf(file)
+    # extract and clean the resume text before saving
+    raw_text_content = extract_text_from_pdf(file)
+    text_content = preprocess_text(raw_text_content)
+    embedding = generate_embedding(text_content)
 
-    # Save resume
+    # save the resume with its embedding
     resume = Resume(
         user_id=user.id,
         filename=file.filename,
         text_content=text_content,
-        embedding="[]",
+        embedding=json.dumps(embedding),
         upload_date=datetime.utcnow()
     )
 
     db.add(resume)
     db.commit()
     db.refresh(resume)
+
+    # add the saved resume into the separate resume faiss workflow
+    add_resume_vector(embedding, {"resume_id": resume.id})
 
     return {
         "message": "Resume uploaded successfully",

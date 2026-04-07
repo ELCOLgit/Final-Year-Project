@@ -9,10 +9,15 @@ from backend.models.job_postings_model import JobPosting
 from backend.models.resume_model import Resume
 from backend.models.user_model import User
 from backend.nlp.skills_extractor import extract_skills_from_text
-from backend.services.cvService import generate_match_explanation, get_match_label, multi_step_match_analysis
+from backend.services.cvService import (
+    build_match_score_data,
+    generate_match_explanation,
+    multi_step_match_analysis,
+)
 from backend.utils.dependencies import get_current_user, require_recruiter
 from backend.utils.embedding_utils import generate_embedding
 from backend.vectorStore.faiss_index import search as faiss_search
+from backend.vectorStore.resume_faiss_index import search as resume_faiss_search
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
 
@@ -26,16 +31,8 @@ def get_db():
 
 
 def build_score_data(score):
-    # add a simple label for the match strength
-    match_label = get_match_label(score)
-
-    # keep the original score and also add simpler display formats
-    return {
-        "score": score,
-        "percentage_score": int(score * 100),
-        "rating_score": round(score * 10),
-        "match_label": match_label,
-    }
+    # build one shared score payload for every match response
+    return build_match_score_data(score)
 
 
 def unique_by_id(items, id_key):
@@ -127,6 +124,7 @@ def get_matches_for_resume(
         }
         for m in matches
     ]
+    return unique_by_id(results, "id")
     return unique_by_id(results, "job_id")
 
 
@@ -162,26 +160,71 @@ def get_matches_for_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # load all matches for one job and rank them from highest to lowest
-    matches = (
-        db.query(Match)
-        .filter(Match.job_posting_id == job_id)
-        .order_by(Match.match_score.desc())
-        .all()
-    )
+    # create an embedding from the selected job text
+    job_text = job.description or ""
+    job_embedding = generate_embedding(job_text)
 
-    results = [
-        {
-            "resume_id": m.resume.id,
-            "filename": m.resume.filename,
-            "user_id": m.resume.user_id,
-            **build_score_data(m.match_score),
-            "generated_at": m.generated_at,
-            "skills": extract_skills_from_text(m.resume.text_content or ""),
-        }
-        for m in matches
-    ]
-    return unique_by_id(results, "resume_id")
+    # search the separate resume faiss index for the closest resumes
+    faiss_results = resume_faiss_search(job_embedding, k=20)
+    ranked_resumes = []
+    seen_resume_ids = set()
+
+    for result in faiss_results:
+        metadata = result.get("metadata") or {}
+        resume_id = metadata.get("resume_id")
+        if resume_id is None or resume_id in seen_resume_ids:
+            continue
+
+        resume = db.query(Resume).filter(Resume.id == resume_id).first()
+        if not resume:
+            continue
+
+        seen_resume_ids.add(resume_id)
+
+        # score the resume against the selected job using the shared hybrid logic
+        resume_text = resume.text_content or ""
+        embedding_score = float(result.get("score", 0.0))
+        analysis = multi_step_match_analysis(resume_text, job_text, embedding_score=embedding_score)
+        final_score = float(analysis.get("final_score", 0.0))
+
+        # save or update the ranked result in the matches table
+        saved_match = (
+            db.query(Match)
+            .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
+            .first()
+        )
+        if saved_match:
+            saved_match.match_score = final_score
+            saved_match.generated_at = datetime.utcnow()
+        else:
+            saved_match = Match(
+                user_id=resume.user_id,
+                resume_id=resume.id,
+                job_posting_id=job.id,
+                match_score=final_score,
+                created_at=datetime.utcnow(),
+                generated_at=datetime.utcnow(),
+            )
+            db.add(saved_match)
+            db.flush()
+
+        ranked_resumes.append({
+            "resume_id": resume.id,
+            "filename": resume.filename,
+            "user_id": resume.user_id,
+            **build_score_data(final_score),
+            "generated_at": saved_match.generated_at,
+            "reasoning": {
+                "matching_skills": analysis.get("matching_skills", []),
+                "missing_skills": analysis.get("missing_skills", []),
+                "explanation": generate_match_explanation(resume_text, job_text, final_score),
+            },
+        })
+
+    db.commit()
+
+    ranked_resumes.sort(key=lambda item: item.get("final_score", 0.0), reverse=True)
+    return unique_by_id(ranked_resumes, "resume_id")
 
 
 @router.get("/search/{resume_id}")
@@ -296,7 +339,7 @@ def search_matches_for_resume(
     db.commit()
 
     # rank matches from highest score to lowest
-    matches.sort(key=lambda item: item["score"], reverse=True)
+    matches.sort(key=lambda item: item["final_score"], reverse=True)
 
     # return the ranked matches list directly
     return unique_by_id(matches, "job_id")

@@ -15,6 +15,7 @@ from backend.models.resume_model import Resume
 from backend.models.user_model import User  # noqa: F401
 from backend.nlp.preprocessing import preprocess_text
 from backend.utils.embedding_utils import generate_embedding
+from backend.vectorStore.resume_faiss_index import add_vector as add_resume_vector
 
 
 def main():
@@ -60,14 +61,16 @@ def main():
             db.commit()
             db.refresh(resume)
 
-            # resumes are not part of the current faiss index workflow
-            added_to_faiss = "no"
+            # add the saved resume to the separate resume faiss index
+            added_to_resume_faiss = "no"
+            if embedding:
+                add_resume_vector(embedding, {"resume_id": resume.id})
+                added_to_resume_faiss = "yes"
 
             print(f"resume id: {dataset_resume_id}")
             print(f"category: {category}")
-            print(f"text loaded: {text_loaded}")
             print(f"embedding created: {embedding_created}")
-            print(f"added to faiss: {added_to_faiss}")
+            print(f"added to resume faiss: {added_to_resume_faiss}")
             print("---")
     finally:
         db.close()

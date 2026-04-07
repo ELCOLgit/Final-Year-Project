@@ -325,7 +325,7 @@ search_resume_id = st.session_state.get("search_resume_id")
 top_matches = unique_by_id((top_matches_data or {}).get("top_matches", []), "resume")
 top_matches = sorted(
     top_matches,
-    key=lambda item: item.get("score", item.get("percentage_score", 0)),
+    key=get_match_sort_score,
     reverse=True,
 )
 top_matches = top_matches[:5]

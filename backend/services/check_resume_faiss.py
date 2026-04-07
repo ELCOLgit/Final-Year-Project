@@ -1,38 +1,49 @@
+import json
 import os
 import sys
+from pathlib import Path
+
+import faiss
+
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if project_root not in sys.path:
-    # make backend imports work when this script runs directly
+    # make local imports work when this script runs directly
     sys.path.append(project_root)
-
-from backend.vectorStore import faiss_index
 
 
 def main():
-    # load the current faiss files used by the project
-    faiss_index.load_index()
+    # build the file paths for the resume faiss workflow
+    data_dir = Path(project_root) / "backend" / "data"
+    index_file = data_dir / "resumes.faiss"
+    metadata_file = data_dir / "resumes_metadata.json"
 
-    # print how many vectors exist in the current index
-    total_embeddings = faiss_index.index_size()
-    print(f"faiss embeddings currently stored: {total_embeddings}")
-
-    # check whether the current metadata includes resume ids
-    linked_resume_ids = []
-    for metadata in faiss_index.metadata_store:
-        resume_id = metadata.get("resume_id")
-        if resume_id is not None:
-            linked_resume_ids.append(resume_id)
-
-    if linked_resume_ids:
-        print(f"resume embeddings currently stored in faiss: {len(linked_resume_ids)}")
-        print("sample resume ids:")
-        for resume_id in linked_resume_ids[:5]:
-            print(resume_id)
+    # load the resume faiss index and print its size
+    if index_file.exists():
+        index = faiss.read_index(str(index_file))
+        print(f"resume embeddings stored: {index.ntotal}")
     else:
-        print("resume embeddings currently stored in faiss: 0")
+        print("resume embeddings stored: 0")
         print("sample resume ids: none")
-        print("note: the current faiss workflow stores job posting vectors, not resume vectors.")
+        return
+
+    # load the metadata file and print a few linked resume ids
+    if metadata_file.exists():
+        with open(metadata_file, "r", encoding="utf-8") as file:
+            metadata = json.load(file)
+    else:
+        metadata = []
+
+    sample_resume_ids = []
+    for item in metadata[:5]:
+        resume_id = item.get("resume_id")
+        if resume_id is not None:
+            sample_resume_ids.append(resume_id)
+
+    if sample_resume_ids:
+        print(f"sample resume ids: {sample_resume_ids}")
+    else:
+        print("sample resume ids: none")
 
 
 if __name__ == "__main__":

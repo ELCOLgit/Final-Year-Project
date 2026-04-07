@@ -15,7 +15,6 @@ if str(project_root) not in sys.path:
 
 from backend.services.cvService import (
     compare_matching_methods,
-    multi_step_match_analysis,
 )
 
 
@@ -36,42 +35,6 @@ def format_skills(skills):
     if not skills:
         return "none"
     return ", ".join(skills)
-
-
-def get_match_label(score):
-    # use the final score to pick a simple label
-    if score >= 0.75:
-        return "strong match"
-    if score >= 0.5:
-        return "moderate match"
-    return "weak match"
-
-
-def build_comparison_explanation(embedding_score, match_label, matching_skills, missing_skills):
-    # build a short explanation using the real final ai score
-    percentage_score = round(embedding_score * 100)
-    matching_text = format_skills(matching_skills[:3])
-    missing_text = format_skills(missing_skills[:3])
-
-    if matching_skills and missing_skills:
-        return (
-            f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent. "
-            f"They match {matching_text}, but are missing {missing_text}."
-        )
-
-    if matching_skills:
-        return (
-            f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent. "
-            f"They match {matching_text}."
-        )
-
-    if missing_skills:
-        return (
-            f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent. "
-            f"They are missing {missing_text}."
-        )
-
-    return f"This candidate is a {match_label} with a Final AI Match of {percentage_score} percent."
 
 
 def fetch_json(url, headers=None, timeout=20):
@@ -165,7 +128,8 @@ def ranking_card(candidate, rank_number):
     percentage_score = candidate.get("percentage_score", 0)
     rating_score = candidate.get("rating_score", 0)
     match_label = candidate.get("match_label", "no label")
-    skill_text = ", ".join(candidate.get("skills", [])) or "no skills found"
+    reasoning = candidate.get("reasoning", {})
+    skill_text = ", ".join(reasoning.get("matching_skills", [])) or "no skills found"
     return f"""
     <div style="
         background:#ffffff;
@@ -239,7 +203,7 @@ def unique_by_id(items, id_key):
 
 
 def load_comparison_results(job_id, candidates, headers):
-    # load the selected job once and compare it with each candidate cv
+    # load the selected job once and combine backend match scores with extra method scores
     comparison_results = []
     job_data, job_error = fetch_json(f"{backend_url}/jobs/{job_id}")
     if job_error or not job_data:
@@ -258,26 +222,21 @@ def load_comparison_results(job_id, candidates, headers):
 
         cv_text = resume_data.get("text_content", "")
         method_scores = compare_matching_methods(cv_text, job_text)
-        analysis = multi_step_match_analysis(cv_text, job_text)
-        embedding_score = method_scores.get("embedding_score", 0.0)
-        match_label = get_match_label(embedding_score)
-        explanation = build_comparison_explanation(
-            embedding_score,
-            match_label,
-            analysis.get("matching_skills", []),
-            analysis.get("missing_skills", []),
-        )
+        reasoning = candidate.get("reasoning", {})
 
         comparison_results.append({
             "filename": candidate.get("filename", "unknown cv"),
             "resume_id": resume_id,
+            "final_score": candidate.get("final_score", 0.0),
+            "percentage_score": candidate.get("percentage_score", 0),
+            "rating_score": candidate.get("rating_score", 0),
+            "match_label": candidate.get("match_label", "weak match"),
             "ats_score": method_scores.get("ats_score", 0.0),
             "tfidf_score": method_scores.get("tfidf_score", 0.0),
-            "embedding_score": embedding_score,
-            "match_label": match_label,
-            "matching_skills": analysis.get("matching_skills", []),
-            "missing_skills": analysis.get("missing_skills", []),
-            "explanation": explanation,
+            "embedding_score": method_scores.get("embedding_score", 0.0),
+            "matching_skills": reasoning.get("matching_skills", []),
+            "missing_skills": reasoning.get("missing_skills", []),
+            "explanation": reasoning.get("explanation", "No explanation available."),
         })
 
     return unique_by_id(comparison_results, "resume_id"), None
@@ -606,7 +565,7 @@ with comparison_tab:
         # keep the comparison tools in their own tab
         st.markdown("<div class='section-title'>Candidate Comparison</div>", unsafe_allow_html=True)
         st.markdown(
-            "<div class='section-subtitle'>Compare ats, tf-idf, embedding, and final match details for each candidate.</div>",
+            "<div class='section-subtitle'>Review the shared final match score beside the supporting ats and tf-idf checks for each candidate.</div>",
             unsafe_allow_html=True,
         )
 
@@ -659,8 +618,8 @@ with comparison_tab:
                             with final_left:
                                 st.markdown("**Final AI Match**")
                                 st.metric(
-                                    "Embedding Score",
-                                    f"{round(result['embedding_score'] * 100)}%",
+                                    "Percentage Score",
+                                    f"{result['percentage_score']}%",
                                 )
 
                             with final_right:
@@ -668,10 +627,11 @@ with comparison_tab:
                                 st.metric("Final Label", result["match_label"])
 
                             st.markdown("**Score Summary**")
-                            score_col_1, score_col_2, score_col_3 = st.columns(3, gap="medium")
-                            score_col_1.metric("ATS Score", f"{round(result['ats_score'] * 100)}%")
-                            score_col_2.metric("TF-IDF Score", f"{round(result['tfidf_score'] * 100)}%")
-                            score_col_3.metric("Embedding Score", f"{round(result['embedding_score'] * 100)}%")
+                            score_col_1, score_col_2, score_col_3, score_col_4 = st.columns(4, gap="medium")
+                            score_col_1.metric("Final Score", f"{result['final_score']:.2f}")
+                            score_col_2.metric("Rating Score", f"{result['rating_score']}/10")
+                            score_col_3.metric("ATS Score", f"{round(result['ats_score'] * 100)}%")
+                            score_col_4.metric("TF-IDF Score", f"{round(result['tfidf_score'] * 100)}%")
 
                             # keep the detailed reasoning inside an expander
                             with st.expander("View Details"):
