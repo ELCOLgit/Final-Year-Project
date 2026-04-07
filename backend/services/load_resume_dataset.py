@@ -30,10 +30,13 @@ def main():
             dataset_resume_id = row.get("ID")
             category = row.get("Category")
             resume_text = row.get("Resume_str")
+            text_loaded = "no"
 
             # skip rows with missing or empty resume text
             if pd.isna(resume_text) or not str(resume_text).strip():
                 continue
+
+            text_loaded = "yes"
 
             # clean the text before creating the embedding
             cleaned_text = preprocess_text(str(resume_text))
@@ -62,6 +65,7 @@ def main():
 
             print(f"resume id: {dataset_resume_id}")
             print(f"category: {category}")
+            print(f"text loaded: {text_loaded}")
             print(f"embedding created: {embedding_created}")
             print(f"added to faiss: {added_to_faiss}")
             print("---")
