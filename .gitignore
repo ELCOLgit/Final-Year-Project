@@ -1,1 +1,5 @@
 backend/data/
+career_advisor.db
+venv/
+__pycache__/
+*.pyc
