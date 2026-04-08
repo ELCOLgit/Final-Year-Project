@@ -9,7 +9,7 @@ if project_root not in sys.path:
     # make backend imports work when this script runs directly
     sys.path.append(project_root)
 
-from backend.services.cvService import compare_matching_methods, multi_step_match_analysis
+from backend.services.cvService import compare_matching_methods, generate_match_explanation, multi_step_match_analysis
 
 
 def run_case(name, cv_text, job_text):
@@ -22,6 +22,11 @@ def run_case(name, cv_text, job_text):
             job_text,
             embedding_score=method_scores.get("embedding_score", 0.0),
         )
+        explanation = generate_match_explanation(
+            cv_text,
+            job_text,
+            analysis.get("final_score", 0.0),
+        )
 
     print(f"\n{name}")
     print(f"ats score: {method_scores.get('ats_score', 0.0):.2f}")
@@ -31,6 +36,7 @@ def run_case(name, cv_text, job_text):
     print(f"match label: {analysis.get('match_label', 'weak match')}")
     print(f"matching skills: {analysis.get('matching_skills', [])}")
     print(f"missing skills: {analysis.get('missing_skills', [])}")
+    print(f"explanation: {explanation}")
 
 
 def main():
@@ -90,6 +96,58 @@ def main():
             "job_text": (
                 "Senior project coordinator needed with communication, teamwork, leadership, "
                 "planning, scheduling, office tools, and stakeholder management."
+            ),
+        },
+        {
+            "name": "6. strong technical fit but weak soft skills",
+            "cv_text": (
+                "Software engineer with Python, SQL, FastAPI, cloud computing, APIs, "
+                "machine learning, and data analysis experience from backend projects."
+            ),
+            "job_text": (
+                "Hiring a data platform engineer with Python, SQL, FastAPI, cloud computing, "
+                "data analysis, communication, teamwork, and presentation skills."
+            ),
+        },
+        {
+            "name": "7. strong soft skills but weak technical fit",
+            "cv_text": (
+                "Candidate with strong communication, teamwork, leadership, customer service, "
+                "presentation skills, and project coordination experience."
+            ),
+            "job_text": (
+                "Looking for a machine learning engineer with Python, SQL, machine learning, "
+                "data analysis, cloud computing, and API development."
+            ),
+        },
+        {
+            "name": "8. exact keyword overlap but wrong job domain",
+            "cv_text": (
+                "Healthcare administrator with documentation, scheduling, communication, "
+                "training, compliance, and leadership in hospital operations."
+            ),
+            "job_text": (
+                "Film producer role requiring documentation, scheduling, communication, "
+                "training, leadership, media production, and creative direction."
+            ),
+        },
+        {
+            "name": "9. semantically similar wording with fewer exact keyword matches",
+            "cv_text": (
+                "Worked on analytical reporting, dashboard visualisation, spreadsheet tools, "
+                "stakeholder updates, and insight presentations for business teams."
+            ),
+            "job_text": (
+                "Role needs data analysis, data visualization, office tools, communication, "
+                "and business reporting."
+            ),
+        },
+        {
+            "name": "10. almost empty cv / minimal text case",
+            "cv_text": "motivated graduate looking for work",
+            "job_text": (
+                "Need an administrative coordinator with office tools, communication, "
+                "scheduling, documentation, and project coordination."
             ),
         },
     ]

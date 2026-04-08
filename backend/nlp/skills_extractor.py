@@ -418,6 +418,21 @@ SKILL_NORMALIZATION_MAP = {
 # use the normalized skill names as the main output list
 KNOWN_SKILLS = sorted(set(SKILL_NORMALIZATION_MAP.values()))
 
+# keep a small list of transferable skills that should count less than domain skills
+GENERIC_TRANSFERABLE_SKILLS = {
+    "communication",
+    "teamwork",
+    "documentation",
+    "presentation skills",
+    "leadership",
+    "project coordination",
+    "project management",
+    "scheduling",
+    "customer service",
+    "administration",
+    "office management",
+}
+
 
 def normalize_skill_name(skill: str) -> str:
     # convert any raw skill text into one normalized skill label
@@ -466,12 +481,28 @@ def compare_normalized_skills(cv_skills: List[str], job_skills: List[str]):
     normalized_cv_skills = normalize_skill_list(cv_skills)
     normalized_job_skills = normalize_skill_list(job_skills)
     normalized_cv_set = set(normalized_cv_skills)
+    core_job_skills = sorted(
+        skill for skill in normalized_job_skills if skill not in GENERIC_TRANSFERABLE_SKILLS
+    )
+    generic_job_skills = sorted(
+        skill for skill in normalized_job_skills if skill in GENERIC_TRANSFERABLE_SKILLS
+    )
     matching_skills = sorted(skill for skill in normalized_job_skills if skill in normalized_cv_set)
     missing_skills = sorted(skill for skill in normalized_job_skills if skill not in normalized_cv_set)
+    core_matching_skills = sorted(skill for skill in core_job_skills if skill in normalized_cv_set)
+    generic_matching_skills = sorted(skill for skill in generic_job_skills if skill in normalized_cv_set)
+    core_missing_skills = sorted(skill for skill in core_job_skills if skill not in normalized_cv_set)
+    generic_missing_skills = sorted(skill for skill in generic_job_skills if skill not in normalized_cv_set)
 
     return {
         "matching_skills": matching_skills,
         "missing_skills": missing_skills,
+        "core_job_skills": core_job_skills,
+        "generic_job_skills": generic_job_skills,
+        "core_matching_skills": core_matching_skills,
+        "generic_matching_skills": generic_matching_skills,
+        "core_missing_skills": core_missing_skills,
+        "generic_missing_skills": generic_missing_skills,
         "normalized_cv_skills": normalized_cv_skills,
         "normalized_job_skills": normalized_job_skills,
     }

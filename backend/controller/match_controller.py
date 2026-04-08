@@ -35,6 +35,228 @@ def build_score_data(score):
     return build_match_score_data(score)
 
 
+def parse_resume_category(resume, metadata):
+    # read the resume category from faiss metadata first, then fall back to the filename
+    metadata_category = (metadata or {}).get("category")
+    if metadata_category and str(metadata_category).strip():
+        return str(metadata_category).strip()
+
+    filename = (resume.filename or "")
+    if not filename.startswith("dataset_resume_"):
+        return "unknown"
+
+    trimmed_name = filename.removeprefix("dataset_resume_").removesuffix(".txt")
+    parts = trimmed_name.split("_", 1)
+
+    if len(parts) < 2 or not parts[1].strip():
+        return "unknown"
+
+    return parts[1].strip()
+
+
+def get_likely_job_categories(job):
+    # map simple job keywords to likely resume categories
+    job_text = f"{job.title or ''} {job.description or ''}".lower()
+    likely_categories = set()
+
+    category_keywords = {
+        "DIGITAL-MEDIA": ["marketing", "social media", "content", "brand", "digital media"],
+        "PUBLIC-RELATIONS": ["marketing", "public relations", "communications", "media relations"],
+        "BUSINESS-DEVELOPMENT": [
+            "marketing",
+            "sales",
+            "business development",
+            "account manager",
+            "consultant",
+            "service manager",
+            "customer service",
+        ],
+        "SALES": [
+            "marketing",
+            "sales",
+            "business development",
+            "account manager",
+            "service manager",
+            "customer service",
+            "waiter",
+        ],
+        "HEALTHCARE": ["therapist", "counselor", "mental health", "nurse", "medical", "healthcare", "dental"],
+        "ADVOCATE": ["attorney", "law", "legal", "compliance"],
+        "ENGINEERING": ["engineer", "developer", "technician", "software", "mechanical", "electrical", "service technician"],
+        "INFORMATION-TECHNOLOGY": ["engineer", "developer", "technician", "software", "it", "python", "sql", "cloud", "data engineer"],
+        "AUTOMOBILE": ["engineer", "technician", "automotive", "service technician"],
+        "CHEF": [
+            "restaurant",
+            "hospitality",
+            "food",
+            "dining",
+            "service manager",
+            "kitchen",
+            "chef",
+            "waiter",
+            "food service",
+        ],
+        "FINANCE": ["finance", "financial", "budget", "accountant", "accounting"],
+        "BANKING": ["banking", "bank", "loan", "credit"],
+        "ACCOUNTANT": ["accountant", "accounting", "tax", "payroll", "bookkeeping"],
+        "TEACHER": ["teacher", "lecturer", "tutor", "education", "instructor"],
+        "FITNESS": ["fitness", "trainer", "coach", "gym", "service-oriented", "guest experience"],
+        "DESIGNER": ["designer", "design", "creative", "graphic"],
+        "ARTS": ["designer", "creative", "arts", "artist"],
+        "CONSULTANT": ["consultant", "advisory", "strategy"],
+        "BPO": ["customer service", "call handling", "guest service", "service manager", "waiter"],
+    }
+
+    for category, keywords in category_keywords.items():
+        if any(keyword in job_text for keyword in keywords):
+            likely_categories.add(category)
+
+    return likely_categories
+
+
+def clamp_score(score):
+    # keep recruiter rerank scores inside the normal ui range
+    if score < 0:
+        return 0.0
+    if score > 1:
+        return 1.0
+    return float(score)
+
+
+def get_recruiter_category_bonus(likely_categories, resume_category):
+    # add a small domain bonus when the resume category matches the job area
+    if not likely_categories or resume_category == "unknown":
+        return 0.0
+
+    if resume_category in likely_categories:
+        return 0.05
+
+    return 0.0
+
+
+def is_marketing_job(job):
+    # detect marketing-style roles so stronger media bonuses can be applied
+    job_text = f"{job.title or ''} {job.description or ''}".lower()
+    marketing_keywords = [
+        "marketing",
+        "media",
+        "communications",
+        "brand",
+        "advertising",
+        "campaign",
+    ]
+    return any(keyword in job_text for keyword in marketing_keywords)
+
+
+def get_marketing_category_bonus(job, resume_category):
+    # give pr and digital-media a slightly stronger boost for marketing roles
+    if not is_marketing_job(job):
+        return 0.0
+
+    if resume_category in {"PUBLIC-RELATIONS", "DIGITAL-MEDIA"}:
+        return 0.03
+
+    if resume_category in {"BUSINESS-DEVELOPMENT", "SALES", "DESIGNER", "ARTS"}:
+        return 0.01
+
+    return 0.0
+
+
+def get_recruiter_core_skill_bonus(analysis):
+    # reward stronger core skill coverage a bit more than generic overlap
+    core_matching_count = int(analysis.get("core_matching_count", 0))
+
+    if core_matching_count >= 5:
+        return 0.05
+    if core_matching_count >= 3:
+        return 0.03
+    if core_matching_count >= 1:
+        return 0.01
+    return 0.0
+
+
+def get_recruiter_generic_only_penalty(analysis):
+    # reduce scores that rely mostly on generic transferable skills
+    core_matching_count = int(analysis.get("core_matching_count", 0))
+    generic_matching_count = int(analysis.get("generic_matching_count", 0))
+
+    if generic_matching_count >= 3 and core_matching_count == 0:
+        return 0.08
+    if generic_matching_count >= 2 and core_matching_count <= 1:
+        return 0.04
+    return 0.0
+
+
+def is_hospitality_or_service_job(job):
+    # detect restaurant and service roles so unrelated categories can be penalized a bit
+    job_text = f"{job.title or ''} {job.description or ''}".lower()
+    hospitality_keywords = [
+        "restaurant",
+        "hospitality",
+        "food",
+        "dining",
+        "service manager",
+        "kitchen",
+        "chef",
+        "waiter",
+        "customer service",
+    ]
+    return any(keyword in job_text for keyword in hospitality_keywords)
+
+
+def get_recruiter_domain_mismatch_penalty(job, likely_categories, resume_category, base_score):
+    # lower obviously unrelated categories for hospitality and service roles unless text match is very strong
+    if not is_hospitality_or_service_job(job):
+        return 0.0
+
+    if resume_category in likely_categories or resume_category == "unknown":
+        return 0.0
+
+    if base_score >= 0.8:
+        return 0.0
+
+    if resume_category in {"ADVOCATE", "TEACHER", "INFORMATION-TECHNOLOGY"}:
+        return 0.05
+
+    return 0.02
+
+
+def rerank_recruiter_match(job, resume, metadata, analysis):
+    # rerank the faiss candidates using small domain-aware score adjustments
+    base_score = float(analysis.get("final_score", 0.0))
+    likely_categories = get_likely_job_categories(job)
+    resume_category = parse_resume_category(resume, metadata)
+    category_bonus = get_recruiter_category_bonus(likely_categories, resume_category)
+    marketing_category_bonus = get_marketing_category_bonus(job, resume_category)
+    core_skill_bonus = get_recruiter_core_skill_bonus(analysis)
+    generic_only_penalty = get_recruiter_generic_only_penalty(analysis)
+    domain_mismatch_penalty = get_recruiter_domain_mismatch_penalty(
+        job,
+        likely_categories,
+        resume_category,
+        base_score,
+    )
+    recruiter_score = clamp_score(
+        base_score
+        + category_bonus
+        + marketing_category_bonus
+        + core_skill_bonus
+        - generic_only_penalty
+        - domain_mismatch_penalty
+    )
+
+    return {
+        "recruiter_score": recruiter_score,
+        "resume_category": resume_category,
+        "likely_categories": sorted(likely_categories),
+        "category_bonus": category_bonus,
+        "marketing_category_bonus": marketing_category_bonus,
+        "core_skill_bonus": core_skill_bonus,
+        "generic_only_penalty": generic_only_penalty,
+        "domain_mismatch_penalty": domain_mismatch_penalty,
+    }
+
+
 def unique_by_id(items, id_key):
     # keep only one item for each id
     unique_items = []
@@ -185,7 +407,8 @@ def get_matches_for_job(
         resume_text = resume.text_content or ""
         embedding_score = float(result.get("score", 0.0))
         analysis = multi_step_match_analysis(resume_text, job_text, embedding_score=embedding_score)
-        final_score = float(analysis.get("final_score", 0.0))
+        rerank_data = rerank_recruiter_match(job, resume, metadata, analysis)
+        final_score = rerank_data["recruiter_score"]
 
         # save or update the ranked result in the matches table
         saved_match = (
@@ -213,10 +436,20 @@ def get_matches_for_job(
             "filename": resume.filename,
             "user_id": resume.user_id,
             **build_score_data(final_score),
+            "base_final_score": float(analysis.get("final_score", 0.0)),
+            "resume_category": rerank_data["resume_category"],
+            "likely_categories": rerank_data["likely_categories"],
+            "category_bonus": rerank_data["category_bonus"],
+            "marketing_category_bonus": rerank_data["marketing_category_bonus"],
+            "core_skill_bonus": rerank_data["core_skill_bonus"],
+            "generic_only_penalty": rerank_data["generic_only_penalty"],
+            "domain_mismatch_penalty": rerank_data["domain_mismatch_penalty"],
             "generated_at": saved_match.generated_at,
             "reasoning": {
                 "matching_skills": analysis.get("matching_skills", []),
                 "missing_skills": analysis.get("missing_skills", []),
+                "core_matching_skills": analysis.get("core_matching_skills", []),
+                "generic_matching_skills": analysis.get("generic_matching_skills", []),
                 "explanation": generate_match_explanation(resume_text, job_text, final_score),
             },
         })

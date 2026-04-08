@@ -94,5 +94,17 @@ def index_size():
     return index.ntotal
 
 
+def get_indexed_resume_ids():
+    # collect the resume ids already linked inside the metadata file
+    indexed_resume_ids = set()
+
+    for item in metadata_store:
+        resume_id = item.get("resume_id")
+        if resume_id is not None:
+            indexed_resume_ids.add(resume_id)
+
+    return indexed_resume_ids
+
+
 # load the saved files when this module is imported
 load_index()

@@ -96,50 +96,107 @@ def build_match_score_data(final_score):
     }
 
 
-def calculate_hybrid_match_score(embedding_score, matching_skills, missing_skills, job_skills):
+def is_exceptionally_strong_match(embedding_score, matching_count, missing_count):
+    # allow a perfect score only when the semantic match and skill match are both very strong
+    return (
+        float(embedding_score) >= 0.9
+        and matching_count >= 6
+        and missing_count == 0
+    )
+
+
+def get_overlap_bonus(matching_count, embedding_score):
+    # keep the overlap bonus smaller when semantic similarity is still weak
+    if matching_count >= 6:
+        bonus = 0.08
+    elif matching_count >= 4:
+        bonus = 0.05
+    else:
+        bonus = 0.0
+
+    if float(embedding_score) < 0.5:
+        bonus = min(bonus, 0.02)
+
+    return bonus
+
+
+def calculate_hybrid_match_score(
+    embedding_score,
+    matching_skills,
+    missing_skills,
+    job_skills,
+    core_matching_skills=None,
+    generic_matching_skills=None,
+    core_missing_skills=None,
+    generic_missing_skills=None,
+    core_job_skills=None,
+    generic_job_skills=None,
+):
     # count the skill values used in the hybrid formula
     matching_count = len(matching_skills or [])
     missing_count = len(missing_skills or [])
     total_job_skills = len(job_skills or [])
+    core_matching_count = len(core_matching_skills or [])
+    generic_matching_count = len(generic_matching_skills or [])
+    core_missing_count = len(core_missing_skills or [])
+    generic_missing_count = len(generic_missing_skills or [])
+    core_job_skill_count = len(core_job_skills or [])
+    generic_job_skill_count = len(generic_job_skills or [])
 
-    # calculate how much of the job skill list is covered
-    if total_job_skills > 0:
-        skill_overlap_score = matching_count / total_job_skills
+    # give core domain skills more weight than generic transferable skills
+    weighted_matching_count = core_matching_count + (generic_matching_count * 0.35)
+    weighted_total_job_skills = core_job_skill_count + (generic_job_skill_count * 0.35)
+    weighted_missing_count = core_missing_count + (generic_missing_count * 0.5)
+
+    # calculate how much of the weighted job skill list is covered
+    if weighted_total_job_skills > 0:
+        skill_overlap_score = weighted_matching_count / weighted_total_job_skills
     else:
         skill_overlap_score = 0.0
 
     # apply a simple penalty when more important skills are missing
     penalty = 0.0
-    if missing_count >= 5:
+    if weighted_missing_count >= 5:
         penalty = 0.15
-    elif missing_count >= 3:
+    elif weighted_missing_count >= 3:
         penalty = 0.10
-    elif missing_count >= 1:
+    elif weighted_missing_count >= 1:
         penalty = 0.05
 
+    # limit how much overlap can lift a match when semantic similarity is still weak
+    skill_overlap_contribution = skill_overlap_score * 0.4
+    if float(embedding_score) < 0.5:
+        skill_overlap_contribution = min(skill_overlap_contribution, 0.2)
+
     # combine semantic similarity with skill coverage
-    final_score = (float(embedding_score) * 0.6) + (skill_overlap_score * 0.4) - penalty
+    final_score = (float(embedding_score) * 0.6) + skill_overlap_contribution - penalty
 
     # add a small reward for stronger real overlap
-    if matching_count >= 6:
-        final_score += 0.08
-    elif matching_count >= 4:
-        final_score += 0.05
+    final_score += get_overlap_bonus(core_matching_count, embedding_score)
 
     # make sure zero overlap does not rank too highly
-    if matching_count == 0:
+    if core_matching_count == 0:
         final_score -= 0.15
         final_score = min(final_score, 0.49)
+
+    # keep perfect scores rare unless the match is clearly exceptional
+    if not is_exceptionally_strong_match(embedding_score, core_matching_count, core_missing_count):
+        final_score = min(final_score, 0.95)
 
     score_data = build_match_score_data(final_score)
 
     return {
         "embedding_score": float(embedding_score),
         "skill_overlap_score": float(skill_overlap_score),
+        "skill_overlap_contribution": float(skill_overlap_contribution),
         "penalty": float(penalty),
         "matching_count": matching_count,
         "missing_count": missing_count,
         "total_job_skills": total_job_skills,
+        "core_matching_count": core_matching_count,
+        "generic_matching_count": generic_matching_count,
+        "core_missing_count": core_missing_count,
+        "generic_missing_count": generic_missing_count,
         **score_data,
     }
 
@@ -340,6 +397,12 @@ def multi_step_match_analysis(cv_text, job_text, embedding_score=0.0):
         matching_skills,
         missing_skills,
         job_skills,
+        core_matching_skills=skill_comparison.get("core_matching_skills", []),
+        generic_matching_skills=skill_comparison.get("generic_matching_skills", []),
+        core_missing_skills=skill_comparison.get("core_missing_skills", []),
+        generic_missing_skills=skill_comparison.get("generic_missing_skills", []),
+        core_job_skills=skill_comparison.get("core_job_skills", []),
+        generic_job_skills=skill_comparison.get("generic_job_skills", []),
     )
 
     print("matching count:", score_data["matching_count"])
@@ -357,6 +420,10 @@ def multi_step_match_analysis(cv_text, job_text, embedding_score=0.0):
     return {
         "matching_skills": matching_skills,
         "missing_skills": missing_skills,
+        "core_matching_skills": skill_comparison.get("core_matching_skills", []),
+        "generic_matching_skills": skill_comparison.get("generic_matching_skills", []),
+        "core_missing_skills": skill_comparison.get("core_missing_skills", []),
+        "generic_missing_skills": skill_comparison.get("generic_missing_skills", []),
         "normalized_cv_skills": skill_comparison.get("normalized_cv_skills", []),
         "normalized_job_skills": skill_comparison.get("normalized_job_skills", []),
         **score_data,
@@ -408,14 +475,12 @@ def generate_match_explanation(cv_text, job_text, final_score=None):
     matching_skills = analysis.get("matching_skills", [])
     missing_skills = analysis.get("missing_skills", [])
     score = float(final_score) if final_score is not None else analysis.get("final_score", 0.0)
-    percentage_score = round(score * 100)
-    rating_score = round(score * 10)
-    match_label = get_match_label(score)
+    score_data = build_match_score_data(score)
 
     return build_hybrid_score_explanation(
-        percentage_score,
-        rating_score,
-        match_label,
+        score_data["percentage_score"],
+        score_data["rating_score"],
+        score_data["match_label"],
         matching_skills,
         missing_skills,
     )
