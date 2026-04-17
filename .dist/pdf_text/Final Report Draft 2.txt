@@ -1,0 +1,2369 @@
+
+--- PAGE 1 ---
+ 
+ 
+ 
+ 
+AI Career Advisor 
+Final Project Report 
+ 
+ 
+TU856 
+BSc in Computer Science 
+ 
+ 
+Aileen Coliban 
+C22304291 
+ 
+Akshay Vellanki 
+ 
+ 
+School of Computer Science 
+Technological University, Dublin 
+ 
+01/04/2026 
+ 
+ 
+
+--- PAGE 2 ---
+ 
+i 
+ 
+Abstract 
+In today’s competitive job market, many job seekers struggle to understand how well their CV aligns 
+with job descriptions and often receive little or no meaningful feedback after submitting 
+applications. At the same time, recruiters face the challenge of reviewing large volumes of 
+applications while identifying candidates who best fit the role. Although intelligent technologies are 
+increasingly used in recruitment, many existing systems prioritise automation for recruiters rather 
+than providing support and feedback to job seekers. 
+This project develops an AI Career Advisor web application that supports both job seekers and 
+recruiters by analysing CVs and job postings to provide matching results and explainable insights. 
+The system uses text processing and embedding-based similarity techniques to extract relevant 
+information particularly skills from CVs and job descriptions. These are stored in FAISS vector 
+indexes to enable efficient similarity retrieval. Based on this, the system recommends relevant job 
+opportunities to job seekers and presents recruiters with ranked candidate matches through an 
+interactive dashboard, helping to reduce manual screening effort. 
+The prototype integrates a FastAPI backend with a Streamlit frontend and provides two dedicated 
+user portals. A hybrid matching approach combining semantic similarity, skill overlap and missing 
+skill analysis is used to improve match quality and provide transparent feedback. 
+Evaluation of the system using controlled test cases and dataset samples showed that the hybrid 
+approach produces more balanced and accurate results compared to keyword-based and TF-IDF 
+methods. The system also demonstrated consistent outputs and improved transparency through 
+explanation features, including matching and missing skills.
+
+--- PAGE 3 ---
+ 
+ii 
+ 
+Declaration 
+ 
+ 
+I hereby declare that the work described in this dissertation is, except where otherwise stated, 
+entirely my own work and has not been submitted as an exercise for a degree at this or any 
+other university. 
+ 
+ 
+Signed: 
+ 
+_________________________ 
+Aileen Coliban 
+ 
+01/04/2026 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+--- PAGE 4 ---
+ 
+iii 
+ 
+Acknowledgements 
+ 
+Body text 
+ 
+ 
+ 
+ 
+
+--- PAGE 5 ---
+ 
+iv 
+ 
+Table of Contents 
+Abstract .................................................................................................................................................... i 
+Declaration .............................................................................................................................................. ii 
+Acknowledgements ................................................................................................................................ iii 
+1. Introduction ........................................................................................................................................ 1 
+1.1. 
+Project Background ............................................................................................................... 1 
+1.2. 
+Project Description ................................................................................................................ 1 
+This diagram illustrates both the job seeker and recruiter workflows, including text processing, 
+FAISS-based retrieval, hybrid scoring, and final recommendation outputs. ...................................... 2 
+1.3. 
+Project Aims and Objectives .................................................................................................. 2 
+1.4. 
+Project Scope ......................................................................................................................... 3 
+1.5. 
+Thesis Roadmap ..................................................................................................................... 3 
+2. Literature Review ................................................................................................................................ 5 
+2.1. Introduction ................................................................................................................................. 5 
+2.2. Alternative Existing Solutions ...................................................................................................... 5 
+2.3. Technologies Researched ............................................................................................................ 6 
+2.4. Other Relevant Research ............................................................................................................. 7 
+2.5. Existing Final Year Projects .......................................................................................................... 8 
+2.6. Conclusions ................................................................................................................................ 10 
+3. System Analysis ................................................................................................................................. 11 
+3.1 System Overview......................................................................................................................... 11 
+3.2 Requirements Gathering ............................................................................................................. 11 
+3.3 Requirements Analysis ................................................................................................................ 17 
+3.4 Logical Architecture of System ................................................................................................... 19 
+3.5 Initial System Specification ......................................................................................................... 19 
+3.6 Conclusions ................................................................................................................................. 20 
+4. System / Experiment Design ............................................................................................................. 21 
+4.1 Introduction ................................................................................................................................ 21 
+4.2. Software Methodology .............................................................................................................. 21 
+4.3 Project Planning .......................................................................................................................... 24 
+4.3.1 Project Schedule .................................................................................................................. 24 
+4.5. Overview of System ................................................................................................................... 26 
+4.5.1 Fulfilment of System Requirements..................................................................................... 27 
+4.X. Other Sections as needed ............................................................. Error! Bookmark not defined. 
+4.X. Conclusions ................................................................................................................................ 29 
+5. System / Experiment Development .................................................................................................. 30 
+
+--- PAGE 6 ---
+ 
+v 
+ 
+5.1. Introduction ............................................................................................................................... 30 
+5.2. Software Development .............................................................................................................. 30 
+5.X. Other Sections as needed .......................................................................................................... 30 
+5.X. Conclusions ................................................................................................................................ 33 
+6. Testing and Evaluation ...................................................................................................................... 50 
+6.1. Introduction ............................................................................................................................... 50 
+6.2. System Testing ........................................................................................................................... 50 
+6.2.1 Unit Testing .......................................................................................................................... 50 
+6.2.2 Integration Testing ............................................................................................................... 50 
+6.3. System Evaluation ...................................................................................................................... 50 
+6.4. Evaluate Project Management................................................................................................... 54 
+6.4.1 Evaluate Project Plan ........................................................................................................... 54 
+6.4.1 Evaluate Project Execution .................................................................................................. 54 
+6.6. Conclusions ................................................................................................................................ 54 
+7. Conclusions and Future Work ........................................................................................................... 55 
+7.1. Introduction ............................................................................................................................... 55 
+7.2. Future Work ............................................................................................................................... 55 
+7.3. Conclusions ................................................................................................................................ 56 
+References ............................................................................................... Error! Bookmark not defined. 
+Appendix A: System Model and Analysis ................................................................................................ 1 
+Appendix B: Design ................................................................................................................................. 1 
+Appendix C: Prompts Used with Gen AI.................................................................................................. 1 
+C.1 Prompts related to Report Writing ............................................................................................... 1 
+C.2 Prompts Related to Research ....................................................................................................... 1 
+C.3 Prompts Related to Design ........................................................................................................... 1 
+C.4 Prompts Related to Coding ........................................................................................................... 1 
+Appendix D: Additional Code Samples .................................................................................................... 1 
+Appendix E: ............................................................................................................................................. 1 
+ 
+ 
+
+--- PAGE 7 ---
+ 
+1 
+ 
+ 
+1. Introduction 
+ 
+1.1. Project Background 
+Finding suitable employment has become increasingly difficult in recent years as competition within 
+the job market continues to rise. Many job seekers now rely on online platforms such as LinkedIn, 
+Indeed and Glassdoor, yet still experience frustration due to unclear job requirements, poor 
+feedback and limited understanding of how well their CVs match advertised roles. Recruiters, on the 
+other hand, face the challenge of screening large volumes of applications efficiently and consistently 
+while avoiding bias. 
+During my internship at SAP, I gained firsthand understanding of how complex and time-consuming 
+the recruitment process can be within large organisations. From drafting job postings and screening 
+applications to conducting multiple interview rounds and extending final offers, I observed the many 
+manual steps and inefficiencies that exist even in highly digital environments. This experience 
+highlighted that Artificial Intelligence (AI) is increasingly necessary to streamline the hiring process, 
+reduce recruiter workload and provide a more transparent and supportive experience for 
+candidates. 
+As a final year computer science student, job searching is a significant and often uncertain challenge. 
+This reinforced the need for a system that not only matches candidates to roles but also provides 
+clear and meaningful feedback. These combined experiences motivated the development of a 
+solution that supports both sides of the recruitment process.  
+AI and Natural Language Processing (NLP) are increasingly being applied across industries, including 
+recruitment. These technologies can analyse and interpret text-based data such as CVs and job 
+descriptions to identify patterns and extract relevant information. A recent review of 49 studies 
+found that while AI tools in recruitment can boost productivity and automate screening, they also 
+raise critical questions of transparency and fairness (Dadaboyev, 2025). 
+The AI Career Advisor project aims to address these challenges by developing a dual-portal web 
+application that supports both job seekers and recruiters. Job seekers receive insights into how their 
+CVs align with job postings, while recruiters can upload vacancies and view ranked candidate 
+matches. This system focuses on improving feedback, transparency and efficiency within the 
+recruitment process. 
+ 
+1.2. Project Description 
+The AI Career Advisor is a web-based system built using a FastAPI backend and a Streamlit frontend. 
+It supports two main user portals: a Job Seeker Portal and a Recruiter Portal. When a CV or job 
+posting is uploaded, the text is cleaned and processed, relevant skills are identified, and embeddings 
+are generated. These embeddings are stored in separate FAISS vector indexes for job postings and 
+resumes, allowing efficient similarity retrieval between candidate and job data. 
+For job seekers, the system compares CVs against job postings and returns matched roles along with 
+final match scores, identified skill gaps and feedback on how well the CV aligns with each role. For 
+recruiters, the system compares job postings against resumes and returns a ranked list of candidate 
+matches. 
+
+--- PAGE 8 ---
+ 
+2 
+ 
+Following the FAISS retrieval step, a hybrid scoring approach is applied, combining semantic 
+similarity, skill overlap and missing skill analysis. In addition, a lightweight domain-aware re-ranking 
+is used on the recruiter side to improve the relevance of candidate results. Figure 1.2.1 illustrates 
+the overall system flow from user input through text processing, vector retrieval, scoring and final 
+recommendation output. 
+ 
+ 
+Figure 1.2.1 – System Data Flow 
+This diagram illustrates both the job seeker and recruiter workflows, including text processing, 
+FAISS-based retrieval, hybrid scoring and final recommendation outputs. 
+ 
+1.3. Project Aims and Objectives 
+The aim of this project is to design and implement an AI-powered career advisory platform that uses 
+NLP-inspired text processing, embedding-based retrieval and hybrid scoring to assist job seekers and 
+recruiters in identifying the most relevant employment matches. 
+Objectives: 
+1. Research and evaluate existing AI and NLP approaches used in recruitment systems. 
+
+--- PAGE 9 ---
+ 
+3 
+ 
+2. Develop a FastAPI backend capable of processing, storing and managing CVs and job 
+postings. 
+3. Implement FAISS vector indexes to enable efficient semantic similarity retrieval between CVs 
+and job descriptions. 
+4. Design and develop separate, user-friendly frontend portals for job seekers and recruiters. 
+5. Develop a hybrid matching system that generates ranked job and candidate 
+recommendations based on similarity, skill overlap and missing skill analysis. 
+6. Provide explainable outputs, including match scores, skill gaps, and feedback to improve 
+transparency. 
+7. Evaluate system performance in terms of accuracy, consistency and usability through 
+structured testing and analysis. 
+8. Document and critically analyse the system design, implementation and evaluation results. 
+ 
+1.4. Project Scope 
+This project focuses on developing a functioning prototype that demonstrates the feasibility of AI-
+driven job and candidate matching with feedback support. The scope includes building a full-stack 
+web application, implementing text preprocessing and skill extraction, generating embeddings, and 
+using FAISS for vector retrieval and similarity search. The system also applies hybrid scoring and 
+simple domain aware re-ranking to improve the quality of match results for both job seekers and 
+recruiters. 
+The project does not attempt to build a large-scale commercial recruitment platform or integrate 
+external job boards. It also does not include personality profiling, psychometric analysis or long-term 
+career prediction. Instead, the project remains focused on practical skill-aware and similarity-based 
+matching, match explanation and overall user experience through dedicated job seeker and recruiter 
+portals. 
+ 
+1.5. Thesis Roadmap 
+ 
+• 
+Chapter 2:  
+Literature Review - Examines existing AI and NLP applications in recruitment and related 
+work. 
+• 
+Chapter 3:  
+System Analysis – Defines the functional and non-functional requirements and user needs. It 
+also outlines how CVs and job postings are processed within the system. 
+• 
+Chapter 4:  
+System Design – Describes the system architecture, data flow, and design decisions, 
+including the integration of FastAPI, FAISS and the dual-portal structure. 
+• 
+Chapter 5: 
+System Development – Explains the implementation of the system, including the backend, 
+frontend, NLP pipeline, FAISS integration and hybrid matching logic. 
+• 
+Chapter 6: 
+Testing and Evaluation – Presents the testing process and evaluates the system’s 
+performance, accuracy, consistency and usability using both controlled and large-scale 
+experiments. 
+ 
+
+--- PAGE 10 ---
+ 
+4 
+ 
+• 
+Chapter 7: 
+Conclusions and Future Work – Summarises the overall project, discusses limitations and 
+outlines potential improvements and future developments. 
+ 
+ 
+
+--- PAGE 11 ---
+ 
+5 
+ 
+2. Literature Review 
+ 
+2.1. Introduction 
+ 
+This chapter critically examines existing systems, tools and technologies related to AI driven 
+recruitment and recommendation systems. It evaluates how current platforms operate, identifies 
+key limitations and highlights gaps that motivate the development of the AI Career Advisor. The 
+review focuses on NLP, recommendation systems and data visualisation approaches, as well as 
+selected final year projects that influenced the design of this system. 
+ 
+2.2. Alternative Existing Solutions  
+ 
+In recent years, AI has reshaped recruitment by helping employers automate parts of the hiring 
+process such as CV screening, skill matching and communication analysis. Many large companies 
+now rely on AI powered recruitment to manage high volumes of applicants. According to LinkedIn, 
+83% of organisations now use some form of AI within their recruitment pipeline, primarily to 
+improve efficiency and quality of hire. While this automation benefits employers, studies show 
+limited transparency for candidates, who often remain unaware of why they were shortlisted or 
+rejected (LinkedIn , 2025). 
+Platforms such as Eightfold AI, HiringBranch, Seekout and Sapia.ai represent the forefront of AI-
+powered recruitment. Eightfold’s approach to automated skill extraction is particularly notable (AI 
+talent acquisition & recruiting platform, n.d.), while HiringBranch’s use of interactive dashboards 
+influenced the design of the recruiter dashboard in this project to make decision making seamless 
+based on candidate performance and skill fit (A Guide to Artificial Intelligence Resume Screening, 
+n.d.). SeekOut applies AI analytics for diversity focused talent searches (Agentic AI Talent Platform 
+for Smarter Hiring, n.d.). Sapia.ai provides bias-reduced structured interviews through NLP (AI 
+Career Coach, n.d.). 
+Workday introduced its Recruiting Agent, which automates outreach and candidate matching, 
+improving recruiter capacity by 54% (Ferrazzi, 2025). Mantrika uses machine learning to predict 
+candidate performance, removing many manual recruitment steps (RecruitEdge | Mantrika.ai, 
+2025). Fountain’s AI demonstrates helping both recruiters and candidates, the Hiring Assistant 
+automates screening for high volume roles and supports multilingual interviews, improving speed 
+and fairness in hiring reducing hiring up to 50% (Fountain AI Recruiter, n.d.). While the Candidate AI 
+Agent gives applicants instant answers, personalized guidance, and around-the-clock support leading 
+to a 50% reduction in support tickets (Candidate AI Agent, n.d.). (Ferrazzi, 2025) 
+However, a consistent gap across these systems shows that they are built primarily for employers, 
+offering little visibility and transparency to applicants. AI Career Advisor differentiates itself by 
+introducing transparency through two dedicated portals, one for recruiters and one for job seekers, 
+providing clear explanations behind each recommendation and feedback on how applicants’ skills 
+align with job postings. 
+While these platforms demonstrate the effectiveness of AI in improving recruitment efficiency, they 
+are primarily designed to support recruiters rather than candidates. As a result, they provide limited 
+
+--- PAGE 12 ---
+ 
+6 
+ 
+transparency and feedback for job seekers, reducing user trust and limiting opportunities for 
+improvement. 
+A key limitation across these systems is the lack of explainability. Candidates are rarely given insight 
+into why they were selected or rejected, which reduces trust and limits their ability to improve. 
+Many systems rely heavily on keyword or pattern matching, which may overlook relevant candidates 
+whose CVs use different terminology. 
+The AI Career Advisor addresses these limitations by introducing a dual-portal approach and 
+focusing on explainable outputs, including matching skills and missing skill feedback. This shifts the 
+system from a purely automation-focused approach to a more user-centred and transparent 
+solution that supports both recruiters and job seekers. 
+System 
+Strengths 
+Limitations 
+Gap Addressed by AI 
+Career Advisor 
+Eightfold AI 
+Strong skill extraction, 
+automation 
+Limited transparency 
+for candidates 
+Adds explainable 
+feedback 
+HiringBranch 
+Interactive 
+dashboards 
+Focused mainly on 
+recruiters 
+Adds job seeker 
+support 
+Workday 
+Scalable, efficient 
+matching 
+Black-box decision 
+making 
+Improves 
+transparency 
+SeekOut 
+Diversity-focused 
+analytics 
+Limited candidate 
+feedback 
+Provides skill insights 
+Sapia.ai 
+Structured NLP 
+interviews 
+Limited explainability 
+Adds match 
+explanations 
+ 
+ 
+2.3. Technologies Researched 
+To support the project’s dual-portal architecture, several technologies were researched for 
+efficiency, scalability and accessibility. 
+The backend was implemented using FastAPI, a high-performance Python framework (FastAPI, n.d.). 
+Other frameworks were considered like Flask and Django but FastAPI’s native support for Pydantic 
+models and automatic documentation made it ideal for API development. 
+The frontend was built in Streamlit, chosen for its ability to prototype accessible, interactive web 
+applications without requiring advanced frontend coding (Streamlit • A faster way to build and share 
+data apps, 2021).  
+For data management, SQLite was used during initial development for simplicity. A scalable 
+alternative would be PostgreSQL for future development. 
+AI-based matching relied on FAISS for vector storage and retrieval, allowing CV embeddings and job 
+descriptions to be compared semantically (Meta, n.d.)Text embeddings were generated using a 
+lightweight embedding approach, allowing CVs and job descriptions to be represented numerically 
+for similarity comparison, a common technique in natural language processing (Tomas Mikolov, 
+2013). FAISS was used to perform efficient vector retrieval, enabling semantic matching beyond 
+simple keyword overlap. These technologies were selected not only for their technical capabilities 
+but also for their ability to support a transparent, explainable AI pipeline. 
+ 
+
+--- PAGE 13 ---
+ 
+7 
+ 
+ 
+Figure 2.3.1 – System Architecture Diagram 
+ 
+2.4. Other Relevant Research  
+ 
+While AI adoption in recruitment is growing drastically, its integration into Applicant Tracking 
+Systems (ATS) has revealed several ethical issues. Traditional ATS solutions use AI for keyword-based 
+matching which is an approach criticised for lacking transparency and nuance. For example, a 
+candidate may be rejected if their CV lacks specific keywords, even if they have the desired 
+experience. This reliance on predefined keywords results in many qualified applicants being 
+overlooked. The opacity of these systems contributes to candidates’ frustration, where a 
+CareerBuilder survey found that 75% of candidates never hear back from employers after applying, 
+showing how ATS can harm communication. (Sameer, 2024) (Applicant Tracking Systems: Everything 
+You Need to Know, n.d.) 
+These challenges underscore the need for fairness and transparency. Organisations should prioritise 
+explainable AI, feedback loops and human oversights to balance automation with empathy. The 
+perceived trustworthiness is also influenced by the design clarity, transparency in data usage and 
+ethical compliance in AI systems. Findings show that aligning user expectations with visible system 
+behaviour builds long-term confidence (Glassberg, 2025). This research influenced AI Career 
+Advisor’s inclusion of user-friendly dashboards, visual explanations for AI matches, and feedback 
+features for improved user engagement. 
+Early studies also suggest that AI driven hiring can outperform human recruiters in speed, efficiency 
+and diversity. The Inclusion Initiative found that AI recruitment increased hiring efficiency and 
+reduced bias compared to traditional methods. 70% of candidates valued reduced response times 
+and objective evaluations from AI tools, but an equal percentage cited concerns about a lack of 
+human touch and transparency (Horodyski, 2023). These insights reinforce the rationale for 
+designing AI Career Advisor with user trust and fairness as core principles. 
+These findings highlight a key tension in AI recruitment systems: while efficiency improves, 
+transparency and user trust often decrease. This reinforces the importance of designing systems 
+that balance automation with explainability. The AI Career Advisor addresses this by prioritising clear 
+
+--- PAGE 14 ---
+ 
+8 
+ 
+feedback, deterministic outputs, and user-facing explanations, helping to align system behaviour 
+with user expectations. 
+ 
+ 
+Figure 2.4.1 - Components of AI trustworthiness: fairness, transparency, privacy, accountability, and 
+security. (Nastoska, 2025) 
+ 
+2.5. Existing Final Year Projects 
+ 
+Several TU Dublin projects in previous years have focused on recommender systems, chatbot 
+interfaces, and analytics dashboards. For example, a 2023 project developed a student 
+recommendation system for personalised study resources, while another created an AI-driven 
+dashboard integrating chatbot feedback for customer analytics. These projects demonstrated 
+effective data integration and user-centric design but lacked feedback mechanisms for system 
+transparency. 
+AI Career Advisor builds upon these ideas by introducing an explainable recommendation system 
+designed for career applications. It also incorporates accessibility and dual-user functionality, 
+ensuring usability for both recruiters and job seekers. 
+ 
+These are the two main thesis’ I took inspiration from: 
+Title: NLPurchase – eCommerce Chatbot 
+
+--- PAGE 15 ---
+ 
+9 
+ 
+Student: Stephanie Finn 
+Description: 
+This project was based on creating an AI chatbot that could help users browse and buy products 
+directly through Facebook Messenger. It used Wit.ai to process natural language so it could 
+understand user queries and respond like a real assistant. It has a backend built in Node.js with a 
+MongoDB database that handled all the products, conversations, and recommendations. The bot 
+could suggest products, keep track of preferences and guide users through the shopping process in 
+chat form. 
+What is complex in this project:  
+The complexity was connecting multiple systems together such as the NLP model, database and 
+Facebook’s APIs, requiring managing real time data and keeping responses fast and accurate. 
+Natural language can be unpredictable alongside getting the chatbot to properly understand human 
+input and respond correctly. Designing intent recognition and entity extraction tool a lot of fine 
+tuning, making it the main complexity of this project. 
+What technical architecture was used: 
+The technical architecture consisted of Node.js for the backend, MongoDB for storing data, Wit.ai 
+handled all the NLP implementation, and the Facebook Messenger APIs so users could chat to it 
+directly. 
+One of the key strengths of this project was the use of NLP to create a natural conversational 
+environment.     
+However, the chatbot depended on predefined intents, which means it wasn’t as flexible or adaptive 
+as newer NLP models. It was also limited to Facebook Messenger. 
+This project demonstrates how NLP can be used to interpret user input and provide structured 
+responses, which is relevant to the design of the AI Career Advisor. 
+ 
+Title: Auto-Efficiency – Machine Learning for Predictive Analysis and Recommender System 
+Student: Glory Pierce Eguare 
+Description: 
+This project was based on building a machine learning model that predicts a car’s fuel efficiency and 
+recommends similar vehicles based on user preferences. The recommender system compared car 
+specs like horsepower, engine size, and weight to find the most similar vehicles for the user. It 
+combined predictive analytics with recommendation logic and included a dashboard where users 
+could view the model’s predications and recommendations. 
+What is complex in this project:  
+The complexity is within the training and optimising the prediction model and then connecting it to a 
+user facing dashboard that updates dynamically. Managing the data between the ML model, 
+backend API, and frontend dashboard required good system design and consistent testing. 
+ 
+
+--- PAGE 16 ---
+ 
+10 
+ 
+What technical architecture was used: 
+It had a Flask backend, a TensorFlow/Keras model for prediction, and a React/Ionic frontend for the 
+dashboard. The project followed an Agile development process. 
+The key strength was how it combined machine learning with an interactive dashboard to make the 
+data easy to understand. The connection between the predictive model, backend and frontend 
+worked well. It was also well structured and modular, which made it easy to follow and potentially 
+scale for bigger demands. One weakness was the the dataset might have limited how well the model 
+could generalise its predictions. 
+This project is close to what I want to do with the AI Career Advisor. I liked how it linked an AI model 
+to a live dashboard and turned predictions into something users could easily interpret. My system 
+will do something similar, extracting and matching data using AI and visualising it clearly for 
+recruiters and job seekers. 
+ 
+2.6. Conclusions 
+The literature highlights that AI recruitment systems have advanced significantly, improving hiring 
+speed, quality, and diversity. However, ethical and transparency challenges persist, particularly from 
+the job seeker’s perspective. AI Career Advisor addresses these limitations through explainable AI 
+and user-focused design, ensuring improved transparency, usability, and support for both sides of 
+the recruitment process. 
+ 
+ 
+
+--- PAGE 17 ---
+ 
+11 
+ 
+3. System Analysis 
+ 
+3.1 System Overview   
+The AI Career Advisor is a web-based system designed to support both job seekers and recruiters 
+through a dual-portal structure. The system aims to improve efficiency and decision making in the 
+recruitment process by providing explainable job and candidate matching. 
+Job seekers can upload CVs and receive matched job recommendations, along with feedback such as 
+match scores and missing skills. Recruiters can upload job postings and view ranked candidate 
+matches, allowing them to identify suitable applicants more efficiently. 
+Unlike traditional recruitment systems that rely heavily on keyword matching or manual review, this 
+system combines text processing, embedding-based retrieval, and hybrid scoring to provide more 
+meaningful results. Separate FAISS vector indexes are used for job postings and resumes, supporting 
+both job seeker and recruiter workflows. 
+The system is designed to ensure consistency, so identical inputs produce identical outputs. This 
+addresses common concerns around unreliable AI behaviour and supports user trust through 
+predictable and explainable results.  
+ 
+3.2 Requirements Gathering 
+Key Stakeholders 
+To ensure the system is both user focused and covers the functional requirements, four main 
+stakeholder groups were identified: 
+• 
+Job Seekers: 
+Students, graduates and early career professionals seeking jobs. 
+They require personalised career recommendations, feedback on skills and clear 
+explanations of job matches. 
+ 
+• 
+Recruiters: 
+Responsible for seeking out and evaluating candidates. They seek efficiency, fairness and 
+tools that reduce manual workload while improving candidate quality. 
+ 
+• 
+Universities: 
+Institutions who can integrate the platform into employability programmes to support 
+students transitioning from education to the workplace. 
+ 
+• 
+System Administration: 
+Manage system maintenance, monitor system performance and ensure consistent system 
+behaviour. 
+ 
+Methods of Requirements Collection 
+To ensure the system meets user expectations, both quantitative and qualitative data were collected 
+through a job seeker survey with 29 participants and informal discussions with SAP recruitment 
+
+--- PAGE 18 ---
+ 
+12 
+ 
+professionals. The survey was designed to understand job seekers’ current challenges, their use of 
+job platforms and AI tools, and their trust in AI based recruitment systems. 
+With that in mind, a mixed approach was used to gather comprehensive requirements data: 
+1. Online Job Seeker Survey: 
+A structured survey sent out to people of different demographics but mainly focusing on 
+students within Microsoft Forms. The survey focused on current job seeking challenges, 
+trust in AI hiring and desired features in a career recommendation tool. 
+ 
+2. Informal Interviews with SAP Professionals: 
+Informal discussions with SAP recruiters and HR specialists showed in inefficiencies in 
+manual CV reviews alongside ATS systems and emphasised the need for consistent, 
+explainable AI. 
+ 
+3. Document and Literature Review: 
+Secondary sources which highlight the limitations within AI screening currently from 
+academic journals and HR technology reports where AI bias, user distrust and lack of 
+transparency were key issues. 
+ 
+4. Observation of Existing Systems: 
+Analysing how current recruitment systems operate such as Eightfold and Workday. This 
+helped refine expectations and user flows. 
+ 
+ 
+Survey Demographics and Key Findings: 
+• 
+A total of 29 participants took part in the survey where 69% were students and 21% were 
+currently employed but seeking new opportunities. 
+ 
+Figure 3.2.1 – Demographic background 
+ 
+• 
+52% searched for jobs occasionally and 97% had used platforms such as LinkedIn, Indeed or 
+Glassdoor before. 
+
+--- PAGE 19 ---
+ 
+13 
+ 
+ 
+ 
+Figure 3.2.2 – Job search frequency 
+ 
+ 
+ 
+Figure 3.2.3 – Platform Usage 
+ 
+ 
+
+--- PAGE 20 ---
+ 
+14 
+ 
+• 
+The most common challenges reported were: 
+o Lack of feedback from employers – 39% 
+o Identifying jobs that match skills – 21% 
+o Lack of career guidance or recommendations – 19% 
+ 
+These results indicate that the biggest gap in current recruitment platforms is the lack of 
+feedback provided to job seekers. This directly supports the inclusion of explainable outputs 
+in the system, such as match scores, missing skills and feedback, allowing users to better 
+understand and improve their applications. 
+ 
+Figure 3.2.4 – Challenges 
+ 
+• 
+62% felt only somewhat confident that their CVs highlighted relevant skills effectively. 
+The fact that most users are only somewhat confident in their CV highlights the need for skill 
+analysis and guidance tools. This reinforces the importance of providing clear insights into 
+how well a CV aligns with job requirements. 
+ 
+Figure 3.2.5 – Confidence in CV skills 
+ 
+• 
+52% said they would trust AI to evaluate their CV and recommend job matches, with 42% 
+responding with maybe. 
+While over half of the respondents expressed trust in AI, the high percentage of uncertainty 
+suggests that transparency is essential. This influenced the design of the system to include 
+explainable scoring and consistent outputs to improve user trust. 
+
+--- PAGE 21 ---
+ 
+15 
+ 
+  
+Figure 3.2.6 – AI trust among users 
+• 
+Respondents expressed strong interest in features like job recommendations, CV skill 
+analysis and interview preparation tips. 
+The strong interest in job recommendations and skill analysis confirms that users are looking 
+for both guidance and actionable insights, rather than relying solely on automated decision 
+making. This validates the dual focus of the system on matching and feedback. 
+ 
+Figure 3.2.7 – Desirable features 
+ 
+Open-ended feedback provided more depth to the qualitative data with one respondent saying: 
+“If the user puts the same CV through twice, the analysis should be the same. A big problem with 
+LLMs is that they may give very different answers to very similar or exact same inputs. This would 
+cause inconsistencies in CV analysis through the use of AI.” 
+This highlights an important limitation in generative AI consistency. This observation allowed me to 
+think and incorporate deterministic AI components for CV analysis to have it as consistent as 
+possible, ensuring identical inputs always return consistent results. This design choice prioritises 
+deterministic behaviour over generative variability, ensuring consistent outputs across repeated 
+inputs. 
+Another respondent suggested that having human oversight and recruiter contact options would be 
+desirable, highlighting the need for fairness and reinforcing the inclusion of explainable scoring and 
+manual review possibilities. 
+
+--- PAGE 22 ---
+ 
+16 
+ 
+The requirements gathering process followed a structured approach consisting of elicitation, 
+analysis, and validation. User needs were identified through surveys, interviews, and observation of 
+existing systems, and were then refined into clear functional and non-functional requirements. This 
+ensured that the final system design aligns closely with real user expectations and practical use 
+cases. 
+Overall, the findings from the survey and stakeholder analysis highlight three key system 
+requirements: the need for transparenct feedback, consistent and reliable matching results, and 
+improved efficiency for recruiters. These insights directly influenced the design of the system, 
+particularly the use of hybrid scoring, explainable outputs and deterministic processing. This ensures 
+that the system not only performs accurate matching but also aligns with real user expectations and 
+practical recruitment challenges. 
+ 
+ 
+
+--- PAGE 23 ---
+ 
+17 
+ 
+ 
+3.3 Requirements Analysis 
+Analysing the requirements gathered and the results of the survey, several key user expectations 
+emerged. Job seekers wanted transparent explanations for AI-generated recommendations, while 
+recruiters valued data-backed automation to support candidate screening and reduce manual 
+workload. Both groups also highlighted the importance of consistency and fairness in AI-assisted 
+decision making. 
+The following models were developed to visualise and validate these interactions: 
+• 
+Use case diagram – shows the main interactions between users and the system, including 
+CV upload, job posting upload, job matching, candidate matching, and viewing 
+recommendations. 
+• 
+Flow chart diagram – shows how data moves through the system, from user input through 
+text processing, skill extraction, vector retrieval, hybrid scoring, and final result presentation. 
+These models were used not only to represent system behaviour but also to ensure that all 
+requirements are clearly mapped to system functionality. This traceability supports later testing and 
+evaluation, where each requirement can be validated against the implemented system. 
+ 
+Figure 3.3.1 – Use Case 
+Shows the main interactions between job seekers, recruiters, and the system, including CV 
+upload, job posting upload, job and candidate matching, and viewing recommendations and 
+feedback. 
+
+--- PAGE 24 ---
+ 
+18 
+ 
+ 
+Figure 3.3.2 - Job seeker Flow chart 
+Illustrates the job seeker workflow, from CV upload through text processing, skill extraction, FAISS-
+based retrieval of job postings, hybrid scoring, and final match results with feedback. 
+ 
+ 
+Figure 3.3.3 - Recruiter Flow chart 
+Illustrates the recruiter workflow, from job posting upload through text processing, skill extraction, 
+FAISS-based retrieval of resumes, hybrid scoring, and domain-aware re-ranking, resulting in ranked 
+candidate recommendations. 
+ 
+ 
+
+--- PAGE 25 ---
+ 
+19 
+ 
+3.4 Logical Architecture of System 
+The system follows a modular architecture consisting of three main components: the frontend 
+interface, the backend processing layer and the data storage layer. 
+The frontend, built using Streamlit, provides separate interfaces for job seekers and recruiters. It 
+handles user interactions such as CV uploads, job posting submissions, and displaying match results 
+and feedback. 
+The backend, developed using FastAPI, manages the core system logic. This includes text 
+preprocessing, skill extraction, embedding generation, and the implementation of the hybrid 
+matching system. The backend is responsible for coordinating communication between the 
+frontend, database and FAISS vector indexes. 
+The data layer consists of a relational database (SQLite) for storing structured data such as users, 
+CVs, job postings, and match results, alongside FAISS vector indexes for efficient similarity retrieval. 
+Separate FAISS indexes are used for job postings and resumes to support both job seeker and 
+recruiter matching workflows. 
+This separation of concerns improves the maintainability, scalability and clarity of the system, 
+allowing each component to be developed and tested independently. 
+ 
+3.5 Initial System Specification 
+Functional Requirements 
+5. CV upload and automated parsing. 
+6. Job posting upload and management for recruiters. 
+7. Text preprocessing and skill extraction from CVs and job descriptions. 
+8. Embedding generation and FAISS-based retrieval for candidate–job similarity search. 
+9. Hybrid scoring based on semantic similarity, skill overlap, and missing skill analysis. 
+10. Job seeker dashboard for viewing matched jobs, feedback, and skill insights. 
+11. Recruiter dashboard for viewing ranked candidate matches and relevant information. 
+12. Explanation feature showing why matches were made, including matching and missing skills. 
+Non-Functional Requirements 
+1. Performance: The system should return match results within a practical response time for 
+prototype use under normal testing conditions. 
+2. Scalability: The system architecture is designed to be modular and support future extension, 
+although large-scale deployment is outside the scope of this prototype. 
+3. Security: Basic handling of uploaded data and secure backend structure are considered, 
+while full GDPR compliance and production-level encryption are outside the scope of this 
+project. 
+4. Usability: The interface should be clear, accessible, and easy to use for both job seekers and 
+recruiters. 
+5. Consistency and Accuracy: Identical inputs should produce consistent outputs through 
+deterministic processing and shared scoring logic. 
+6. Fairness and Transparency: The system provides explainable outputs and aims for consistent 
+ranking behaviour. Formal bias auditing and demographic fairness testing are outside the 
+scope of this prototype. 
+
+--- PAGE 26 ---
+ 
+20 
+ 
+3.6 Conclusions 
+The requirements-gathering process gave a clear picture of what users need and expect. Survey 
+results highlighted a strong demand for feedback, skill insights, and transparent AI 
+recommendations. Input from recruiters and SAP professionals helped shape the dual-portal layout, 
+balancing fairness with efficiency. Together, these findings created a solid base for the system’s 
+design and ethical goals, ensuring AI Career Advisor remains useful, fair, and easy to use. 
+ 
+ 
+
+--- PAGE 27 ---
+ 
+21 
+ 
+4. System / Experiment Design  
+ 
+4.1 Introduction 
+This chapter outlines how the requirements gathered were turned into the design for AI Career 
+Advisor. It explains the methods considered, the chosen approach, and how the system is 
+structured. The main goal of this phase was to connect user needs with a clear and efficient design, 
+covering both technical and usability aspects. 
+This stage marked the move from planning to implementation, focusing on the system’s structure, 
+interface, and key AI features. The final design ensures the system is practical, reliable and built with 
+fairness and transparency in mind. 
+The design focuses on modularity, clarity, and scalability, ensuring that each part of the system can 
+be developed and tested independently. 
+The system was designed to support text processing, embedding-based retrieval, and hybrid scoring, 
+while also providing clear and explainable outputs to users. 
+ 
+4.2. Software Methodology 
+The project followed an Agile development approach, allowing features to be implemented and 
+refined incrementally. This was suitable for the project as the system evolved significantly over time, 
+particularly in the transition from a simple TF-IDF-based prototype to a more advanced hybrid 
+matching system. 
+Development was carried out in iterations, where each stage focused on implementing and testing a 
+specific part of the system. For example, the initial phase focused on setting up the backend and 
+database, followed by the implementation of the matching system, and later the addition of 
+features such as missing skills detection and explanation generation. 
+This approach allowed continuous testing and improvement, making it easier to identify issues such 
+as incorrect matches, dataset inconsistencies, and recruiter-side inaccuracies early in the process. 
+During the planning phase, several software development methodologies were evaluated, including 
+the Waterfall Model, Spiral Model, and Agile Methodology. Each offered different advantages 
+depending on the nature and scale of the project. 
+Waterfall Methodology 
+The Waterfall Model follows a strict linear sequence of stages: 
+• 
+Requirements 
+• 
+Design 
+• 
+Implementation 
+• 
+Testing 
+• 
+Maintenance 
+
+--- PAGE 28 ---
+ 
+22 
+ 
+ 
+Figure 4.2.1 – Waterfall Methodology 
+It allows for clear documentation and well-defined deliverables at each step. However, once a phase 
+is complete, it offers little room for modification without revisiting earlier stages, making it 
+unsuitable for projects requiring flexibility or experimentation, such as AI-driven systems. 
+While Waterfall ensures structure and predictability, it lacks adaptability. Since AI Career Advisor 
+required ongoing feedback from users and iterative testing of AI models, this approach was deemed 
+too rigid. (Atlassian, n.d.) 
+Spiral Model 
+The Spiral Model combines iterative development with risk assessment. It progresses through cycles 
+of planning, designing, building, and evaluating. This allows risks to be identified early while 
+maintaining flexibility to incorporate new features. However, it can become complex and resource-
+intensive for smaller projects. 
+
+--- PAGE 29 ---
+ 
+23 
+ 
+ 
+Figure 4.2.2 – Spiral Model Methodology 
+Although it allows for adaptability, the Spiral Model was not chosen due to the limited scale and 
+timeframe of this project, which required a leaner process. (geeksforgeeks, 2025) 
+ 
+Agile Methodology 
+The Agile Methodology was ultimately selected for this project. Agile focuses on iterative 
+development, collaboration, and user feedback. Work is divided into sprints, each focusing on a 
+specific feature such as CV parsing, AI matching, or recruiter dashboards. Agile’s incremental nature 
+allowed the system to evolve alongside ongoing testing and stakeholder input. (Atlassian, n.d.) 
+ 
+Figure 4.2.3 – Agile Methodology 
+ 
+
+--- PAGE 30 ---
+ 
+24 
+ 
+Under the Agile umbrella, a Feature-Driven Development (FDD) framework was adopted. FDD 
+focuses on designing and building by feature, ensuring tangible progress with each iteration. This 
+method aligned perfectly with the project’s modular structure, where separate features (e.g., 
+resume upload, job posting, AI matching) could be developed and tested independently.  
+The five key activities of FDD include: 
+• 
+Develop an overall model 
+• 
+Build a list of features 
+• 
+Plan by feature 
+• 
+Design by feature 
+• 
+Build by feature 
+(Lynn, n.d.) 
+ 
+ 
+Figure 4.2.3 – FDD Agile Framework 
+ 
+4.3 Project Planning 
+ 
+Describe the approach used for planning the project development. 
+ 
+4.3.1 Project Schedule 
+A project schedule was created at the beginning of development using a Gantt chart to organise the 
+main phases of the project, including research, system design, implementation, testing, and 
+documentation. A Gantt chart provides a visual timeline of tasks, milestones, and dependencies, 
+allowing progress to be tracked clearly throughout the project lifecycle. 
+The initial schedule divided the project into two main phases aligned with the academic timeline: 
+Semester 1 focused on research, planning, and prototyping, while Semester 2 focused on advanced 
+development, evaluation, and refinement. 
+ 
+Early Phase (Weeks 4–11, Semester 1) 
+
+--- PAGE 31 ---
+ 
+25 
+ 
+The early stage of the project followed the planned schedule closely. This phase included: 
+• 
+Finalising the project proposal and feasibility study 
+• 
+Researching existing AI recruitment systems 
+• 
+Designing the database schema and system architecture 
+• 
+Developing initial wireframes and frontend layout 
+• 
+Setting up the FastAPI backend and Streamlit frontend 
+• 
+Implementing a basic TF-IDF matching prototype 
+During this stage, the project progressed as expected, and the Gantt chart provided a clear structure 
+for completing key deliverables such as the interim report and prototype demonstration. 
+ 
+Transition Phase (End of Semester 1) 
+By the end of Semester 1, a working prototype had been developed, supporting: 
+• 
+CV and job uploads 
+• 
+Basic similarity-based matching 
+• 
+Dual job seeker and recruiter flows 
+However, feedback from the interim presentation highlighted that the NLP component required 
+further development to increase technical depth. This marked a shift in focus for the next phase of 
+the project. 
+ 
+Development Phase (Semester 2) 
+In Semester 2, the project moved beyond the initial plan and required adjustments to the schedule. 
+The focus shifted towards implementing a more advanced matching system, including: 
+• 
+Designing and refining the NLP pipeline 
+• 
+Implementing embedding generation 
+• 
+Integrating FAISS for vector-based retrieval 
+• 
+Introducing separate FAISS indexes for job postings and resumes 
+• 
+Developing hybrid scoring based on similarity, skill overlap, and missing skills 
+• 
+Implementing explanation generation and feedback features 
+These tasks were more complex than initially anticipated and required additional time for 
+experimentation, debugging, and refinement. 
+ 
+Refinement and Evaluation Phase 
+The later stages of the project focused on improving system performance and evaluation: 
+• 
+Cleaning and restructuring resume datasets 
+• 
+Rebuilding FAISS indexes with consistent metadata 
+• 
+Implementing recruiter-side domain-aware re-ranking 
+• 
+Developing controlled test cases and evaluation scripts 
+• 
+Conducting both small-scale and larger dataset evaluations 
+
+--- PAGE 32 ---
+ 
+26 
+ 
+This phase was not fully detailed in the original Gantt chart, highlighting the need for flexibility in 
+project planning. 
+ 
+Adaptation and Agile Adjustments 
+Although a structured schedule was created initially, the project did not follow it rigidly. Instead, an 
+Agile approach was used alongside the Gantt chart, allowing tasks and priorities to be adjusted as 
+new challenges emerged. 
+Gantt charts can be effectively combined with Agile development, as they provide a high-level 
+overview while still allowing flexibility to adapt timelines and priorities when needed. 
+For example: 
+• 
+The system evolved from a simple TF-IDF model to a hybrid matching system 
+• 
+Additional features such as missing skills detection and explanation generation were 
+introduced 
+• 
+Recruiter-side re-ranking was added after identifying limitations in initial results 
+These changes demonstrate how the project schedule was continuously refined rather than strictly 
+followed. 
+ 
+4.4. Overview of System 
+The AI Career Advisor is designed as a modular, full-stack web application that supports both job 
+seekers and recruiters through a dual-portal structure. The system is built using a Streamlit frontend, 
+a FastAPI backend, and a data layer consisting of a relational database and FAISS vector indexes. 
+The system allows job seekers to upload CVs and receive matched job recommendations, along with 
+feedback such as match scores, missing skills, and skill-based insights. Recruiters can upload job 
+postings and receive ranked lists of candidate matches, helping to reduce manual screening effort 
+and improve decision making. 
+The overall system is divided into three main layers: 
+• 
+Frontend Layer (Streamlit) 
+• 
+Backend Layer (FastAPI) 
+• 
+Data and Matching Layer (SQLite + FAISS) 
+The frontend is responsible for handling user interaction. It provides separate interfaces for job 
+seekers and recruiters, allowing users to upload data, view results, and interact with the system. The 
+design focuses on clarity and usability, ensuring that outputs such as match scores and feedback are 
+easy to understand. 
+The backend manages the core application logic and acts as the bridge between the user interface 
+and the underlying processing components. It handles API requests, processes user input, 
+coordinates matching workflows, and returns results to the frontend. 
+The matching functionality is implemented through a structured pipeline. When a CV or job posting 
+is uploaded, the text is first cleaned and processed. Relevant skills and patterns are then identified, 
+
+--- PAGE 33 ---
+ 
+27 
+ 
+and embeddings are generated to represent the content numerically. These embeddings are stored 
+in FAISS vector indexes, which allow efficient similarity retrieval. 
+The system uses two separate FAISS indexes: 
+• 
+a job postings index for matching CVs to jobs (job seeker workflow) 
+• 
+a resume index for matching job postings to candidates (recruiter workflow) 
+This separation allows the system to support bidirectional matching while keeping each workflow 
+efficient and clearly defined. 
+After FAISS retrieval, results are further refined using a hybrid scoring approach. This combines 
+semantic similarity, skill overlap, and missing skill analysis to produce a final match score. On the 
+recruiter side, an additional domain-aware re-ranking step is applied to improve the relevance of 
+candidate results. 
+Finally, the system generates explainable outputs, including matching skills, missing skills, and 
+overall scores. This ensures that users can understand how results were produced, improving 
+transparency and trust in the system. 
+Overall, the system design supports efficient matching, clear user interaction, and explainable 
+decision making, while remaining flexible enough for future extension. 
+ 
+4.4.1. Fulfilment of System Requirements 
+The system was designed using a modular architecture, where each requirement is supported by a 
+specific component or workflow. This ensures that the system is structured, maintainable, and 
+aligned with user needs. 
+The logical architecture, consisting of the frontend, backend, and data and matching layers, acts as 
+the foundation for implementing these requirements. The frontend handles user interaction, the 
+backend manages processing and workflows, and the data and matching layer supports storage and 
+similarity retrieval using FAISS. 
+ 
+The table below shows how key functional requirements are implemented within the system design: 
+Table 4.4.1 – Requirement Fulfilment Mapping 
+Functional Requirement 
+Design Response 
+Relevant Component 
+Upload CV 
+CV upload pipeline processes 
+and stores CV data 
+Streamlit Frontend, Resume 
+Processing Module, SQLite 
+Upload job posting 
+Job posting input is processed 
+and stored for matching 
+Streamlit Frontend, Job 
+Posting Module, SQLite 
+Test preprocessing and skill 
+extraction 
+Input text is cleaned and 
+analysed to identify relevant 
+skills 
+NLP Processing Module 
+Generate embeddings 
+Text is converted into 
+numerical vector 
+representations 
+Embedding Generation 
+Module 
+Match CVs to jobs 
+CV embeddings are compared 
+against job postings FAISS 
+index 
+Matching Engine, FAISS Job 
+Index 
+
+--- PAGE 34 ---
+ 
+28 
+ 
+Match jobs to candidates 
+Job embeddings are compared 
+against job postings FAISS 
+index 
+Matching Engine, FAISS 
+Resume Index 
+Rank results 
+Retrieved results are ordered 
+using hybrid scoring 
+Matching Engine 
+Improve match accuracy 
+Hybrid scoring combines, 
+similarity, skill overlap and 
+missing skills 
+Matching Engine 
+Provide explainable results 
+Matching skills, missing skills 
+and scores are returned to 
+users 
+Matching Engine, Frontend 
+Dashboard 
+Support recruiter decision 
+making 
+Ranked candidate lists and 
+insights are displayed 
+Recruiter Dashboard 
+Ensure usability 
+Clear dashboards and 
+structured outputs are 
+provided 
+Streamlit Frontend 
+Ensure consistency 
+Deterministic processing 
+ensures identical inputs 
+produce consistent results 
+Matching Pipeline 
+ 
+The requirement mapping demonstrates that the system design directly supports the needs 
+identified during the analysis phase. Core features such as bidirectional matching, hybrid scoring and 
+explainable outputs are implemented through dedicated components within the architecture. 
+By separating responsibilities across the frontend, backend, and matching layers, the system ensures 
+clarity, flexibility, and ease of maintenance. This structured design also supports future extension, 
+such as integrating additional data sources or improving the matching logic. 
+ 
+4.5 Key Design Decisions 
+This section outlines the key design decisions made during the development of the AI Career Advisor 
+system. These decisions were guided by the need to balance technical performance, usability, and 
+transparency, while aligning with the requirements identified in Chapter 3. 
+Choice of Frontend and Backend 
+The system uses Streamlit for the frontend and FastAPI for the backend. Streamlit was chosen for its 
+ability to rapidly develop interactive data-driven interfaces, making it suitable for building 
+dashboards for both job seekers and recruiters (Streamlit • A faster way to build and share data 
+apps, 2021). FastAPI was selected due to its performance, simplicity and strong support for modular 
+API development (FastAPI, n.d.). This combination allowed for a clear separation between user 
+interface and backend logic 
+Use of FAISS for Retrieval 
+FAISS was selected for efficient vector similarity search, enabling fast retrieval of relevant matches 
+based on embedding similarity. Unlike traditional database queries, FAISS supports high-dimensional 
+vector comparisons, making it well suited for semantic matching between CVs and job descriptions. 
+Use of Separate FAISS Indexes 
+
+--- PAGE 35 ---
+ 
+29 
+ 
+The system uses two separate FAISS indexes: one for job postings and one for resumes. This design 
+supports bidirectional matching, allowing CVs to be matched to jobs and job postings to be matched 
+to candidates. Separating the indexes improves clarity, efficiency and scalability of each workflow. 
+Deterministic Matching Design 
+A deterministic approach was adopted for embedding generation and matching to ensure consistent 
+outputs. Unlike generative AI systems, which may produce varying results for the same input, this 
+approach guarantees that identical inputs produce identical outputs. This was particularly important 
+based on user feedback highlighting concerns around inconsistency in AI systems. 
+Hybrid Scoring Approach 
+Instead of relying solely on keyword matching or similarity scores, a hybrid scoring approach was 
+implemented. Combining multiple recommendation approaches has been shown to improve system 
+accuracy and relevance (Deniz, 2021). This decision improved match accuracy and reduced the 
+impact of misleading keyword matches. 
+Explainability as a Core Design Principle 
+Explainability is widely recognised as essential for improving user trust in AI-driven systems 
+(Wojciech Samek, 2017). Rather than returning only a match score, the system provides additional 
+information such as matching skills, missing skills, and explanatory feedback. This improves 
+transparency and allows users to better understand and act on the results. 
+ 
+4.6. Conclusions 
+This chapter presented the design of the AI Career Advisor system, demonstrating how user 
+requirements were translated into a structured and modular architecture. The use of Agile 
+methodology supported iterative development and allowed the system to evolve from a simple 
+prototype to a more advanced matching solution. 
+The final design integrates a dual-portal interface, FAISS-based retrieval, hybrid scoring, and 
+explainable outputs, ensuring both technical effectiveness and usability. The mapping of 
+requirements to system components further confirms that the design aligns with the needs 
+identified during the analysis phase. 
+Overall, the system provides a strong foundation for implementation, evaluation and future 
+development. 
+ 
+ 
+
+--- PAGE 36 ---
+ 
+30 
+ 
+5. System / Experiment Development 
+ 
+5.1. Introduction 
+This chapter explains how the AI Career Advisor system was developed and implemented as a 
+working prototype. While Chapter 4 focused on the system design and architecture, this chapter 
+describes how that design was translated into a functional application. 
+The system was developed to support two main user groups: job seekers and recruiters. Job seekers 
+can upload a CV and receive ranked job recommendations, while recruiters can upload a job 
+description and receive ranked candidate matches. To support these workflows, the implementation 
+combines a Streamlit frontend, a FastAPI backend, SQLite for structured data storage and FAISS for 
+efficient similarity retrieval. 
+The development process focused not only on building a working system, but also on ensuring that 
+the results produced are meaningful, explainable, and consistent. For this reason, the 
+implementation goes beyond simple keyword matching and introduces a structured processing 
+pipeline. This includes text preprocessing, skill extraction, embedding generation, FAISS-based 
+retrieval, hybrid scoring and recruiter-side re-ranking. 
+5.2. System Implementation Overview 
+The AI Career Advisor was implemented as a full-stack web application using the following core 
+technologies: 
+• 
+Frontend: Streamlit 
+• 
+Backend: FastAPI 
+• 
+Database: SQLite 
+• 
+Vector Search: FAISS 
+The backend acts as the central processing layer of the system. It receives data from the frontend, 
+processes CVs and job descriptions, stores structured data in the database, generates vector 
+representations, performs similarity retrieval using FAISS and returns ranked results to the user. 
+ 
+The implementation was organised into several main components: 
+• 
+Backend API development and route handling 
+• 
+Text preprocessing and skill extraction 
+• 
+Embedding generation and FAISS indexing 
+• 
+Hybrid matching and scoring 
+• 
+Recruiter-side re-ranking 
+• 
+Frontend portals and user interaction 
+ 
+Development was carried out incrementally, with features implemented and tested step by step 
+before being integrated into the full system. This approach made it easier to identify issues early and 
+continuously improve the overall quality of the system. 
+The main backend entry point is defined in main.py line 5, which handles application setup and API 
+routing. 
+ 
+
+--- PAGE 37 ---
+ 
+31 
+ 
+5.3. Backend Development - FastAPI 
+The backend of the system was developed using FastAPI. This framework was chosen because it is 
+lightweight, well suited to API-based applications, and supports clear route definitions and modular 
+development. In this project, FastAPI was used to manage file uploads, database interactions, 
+matching requests, and recruiter-side analysis. 
+The backend was structured using a modular approach, with separate controllers responsible for 
+different parts of the system. These included: 
+• 
+Resume handling 
+• 
+Job posting handling 
+• 
+Matching and search 
+• 
+Recruiter AI support 
+• 
+Authentication 
+All routes were registered in the main application file, allowing the backend logic to remain 
+organised and easier to maintain. 
+ 
+Relevant route registration: main.py (line 24) 
+The core API endpoints implemented in the system include: 
+• 
+/upload/cv → upload and process CV 
+• 
+/upload/job → upload job posting 
+• 
+/matches/search/{resume_id} → return matched jobs 
+• 
+/matches/candidates/{job_id} → return ranked candidates 
+ 
+ 
+Resume upload controller: resume_controller.py (line 45) 
+
+--- PAGE 38 ---
+ 
+32 
+ 
+ 
+Job upload controller: job_posting_controller.py (line 30) 
+ 
+Match search controller: match_controller.py (line 463) 
+ 
+Recruiter ranking controller: match_controller.py (line 370) 
+The backend also supports role-based access in certain areas. For example, recruiters must be 
+authenticated before uploading job postings or accessing candidate rankings. This helps maintain 
+separation between job seeker and recruiter workflows. 
+SQLite was used to store users, resumes, job postings, and match-related data. This provided a 
+simple and effective solution for managing structured data during prototype development. 
+ 
+Database setup: database.py (line 7) 
+ 
+
+--- PAGE 39 ---
+ 
+33 
+ 
+5.4. Resume and Job Upload Implementation 
+One of the first development tasks was implementing the upload process for both resumes and job 
+descriptions. This was an important step, as the entire matching pipeline depends on clean and 
+structured input data. 
+For resumes, the system accepts PDF uploads. The backend extracts the text from the uploaded file 
+using PyMuPDF, preprocesses the extracted content, generates an embedding, stores the processed 
+data in the database and adds the vector to the resume FAISS index. 
+ 
+ 
+PDF extraction function: resume_controller.py (line 34) 
+ 
+Resume Upload Snippet 
+ 
+resume_controller.py (line 58) 
+For job postings, a similar process is followed, except the job description is entered directly as text 
+rather than extracted from a file. The text is preprocessed, converted into an embedding, stored in 
+the database and added to the job FAISS index. 
+ 
+ 
+
+--- PAGE 40 ---
+ 
+34 
+ 
+Job Upload Snippet 
+ 
+job_posting_controller.py (line 41) 
+This implementation ensured that both resumes and job descriptions passed through the same 
+structured processing workflow before matching. 
+ 
+5.5. NLP Pipeline and Text Processing 
+After the upload stage, the system applies a text-processing pipeline before any similarity search or 
+scoring is performed. This step is important because CVs and job descriptions often contain 
+inconsistent formatting, punctuation, line breaks, and non-essential characters that can affect 
+matching accuracy. 
+The preprocessing stage includes: 
+• 
+Converting all text to lowercase 
+• 
+Removing unusual or unnecessary characters 
+• 
+Retaining only useful punctuation and alphanumeric content 
+• 
+Reducing repeated whitespace into a single space 
+ 
+ 
+ 
+ 
+
+--- PAGE 41 ---
+ 
+35 
+ 
+Preprocessing Snippet 
+ 
+preprocessing.py (line 7) 
+Once the text is cleaned, the system performs skill extraction. Instead of using a complex named 
+entity recognition model, a rule-based approach was implemented. A large skill normalisation map 
+was created to group related terms under a single canonical skill label. For example, terms such as 
+“analytics”, “data analyst” and “reporting” can all be mapped to “data analysis”. 
+Skill Extraction Snippet 
+ 
+skills_extractor.py (line 455) 
+An additional improvement in the NLP pipeline was the distinction between domain-specific skills 
+and generic transferable skills. Skills such as “communication” and “teamwork” were treated as 
+lower-weight signals compared to domain-specific skills such as “python”, “sql”, or “machine 
+
+--- PAGE 42 ---
+ 
+36 
+ 
+learning”. This helped reduce misleading matches where generic skills might otherwise inflate 
+similarity scores. 
+ 
+Skill comparison logic: skills_extractor.py (line 479) 
+Overall, this pipeline ensures that both CVs and job descriptions are processed in a consistent and 
+structured way before matching. By combining preprocessing and rule-based skill extraction, the 
+system improves the quality of the data used for similarity search and scoring. 
+ 
+5.6. Embedding Generation and FAISS Integration 
+To support efficient semantic matching, the cleaned text was converted into a fixed-length 
+numerical vector. In this project, vector generation was implemented using a HashingVectorizer with 
+384 features. This means that each CV or job description is represented as a 384-dimensional vector. 
+ 
+Vector generation code: embedding_utils.py (line 1) 
+ 
+ 
+ 
+ 
+ 
+ 
+
+--- PAGE 43 ---
+ 
+37 
+ 
+Embedding Generation Snippet 
+ 
+embedding_utils.py (line 5) 
+These vectors were then stored in FAISS indexes to enable efficient similarity search. FAISS was 
+selected because it is designed for nearest-neighbour retrieval and can search high-dimensional 
+vector data much faster than manually comparing each document. 
+The system uses two separate FAISS indexes: 
+• 
+one index for job postings 
+• 
+one index for resumes 
+This design supports bidirectional matching, allowing CVs to be matched to jobs and job postings to 
+be matched to candidates. 
+ 
+ 
+
+--- PAGE 44 ---
+ 
+38 
+ 
+ 
+ 
+Job FAISS index: faiss_index.py (line 20) 
+ 
+ 
+
+--- PAGE 45 ---
+ 
+39 
+ 
+ 
+Resume FAISS index: resume_faiss_index.py (line 20) 
+Metadata such as job_id or resume_id is stored alongside each vector. When FAISS returns search 
+results, this metadata is used to retrieve the corresponding records from the SQLite database and 
+display them to the user. This separation of responsibilities was an important design decision, as 
+FAISS handles fast vector retrieval while SQLite manages structured application data. 
+Overall, the integration of embedding generation and FAISS enables efficient and scalable similarity 
+search within the system. This allows relevant matches to be retrieved quickly, even as the number 
+of stored CVs and job postings increases. 
+ 
+5.7. Match Retrieval and Hybrid Scoring 
+Although FAISS retrieval is effective for identifying similar vectors, similarity alone was not sufficient 
+to produce reliable final rankings. During development, it became clear that some results appeared 
+semantically similar but still lacked important job-specific skills. 
+To address this, a hybrid matching approach was implemented. FAISS is used as the first-stage 
+retrieval mechanism to return the top candidate results based on embedding similarity. These 
+results are then passed into a second-stage analysis process, where additional factors such as skill 
+overlap, missing skills, and domain relevance are evaluated. 
+
+--- PAGE 46 ---
+ 
+40 
+ 
+ 
+ 
+Main analysis function: cvService.py (line 376) 
+
+--- PAGE 47 ---
+ 
+41 
+ 
+ 
+Match Search Snippet 
+ 
+match_controller.py (line 501) 
+The hybrid scoring process considers multiple factors: 
+• 
+embedding similarity 
+• 
+skill overlap 
+• 
+core skill coverage 
+• 
+missing skills 
+• 
+the balance between generic and domain-specific skills 
+
+--- PAGE 48 ---
+ 
+42 
+ 
+ 
+ 
+Scoring function: cvService.py (line 123) 
+Hybrid Scoring Snippet 
+ 
+
+--- PAGE 49 ---
+ 
+43 
+ 
+cvService.py (line 171) 
+This hybrid approach improves the quality of the final rankings compared to using a single method. It 
+reduces cases where candidates or jobs rank highly due to general similarity or common keywords, 
+while ensuring that domain-relevant skills are properly considered. 
+Overall, the combination of FAISS retrieval and hybrid scoring provides a more balanced and 
+accurate matching process, supporting more meaningful results for both job seekers and recruiters. 
+ 
+5.8. Recruiter-Side Re-Ranking 
+During testing, it was observed that recruiter-side results were more sensitive to domain relevance 
+compared to job seeker results. In some cases, FAISS returned resumes that had reasonable textual 
+similarity to a job description but were not strong candidates for the role in practice. 
+To address this, an additional re-ranking stage was introduced for recruiter searches. After FAISS 
+retrieves the top resume candidates, the system applies a lightweight domain-aware adjustment to 
+refine the scores. This stage considers several factors including: 
+• 
+Likely job categories inferred from the job title and description 
+• 
+Category information inferred from resume metadata or filenames 
+• 
+Bonuses for strong domain alignment 
+• 
+Penalties for matches based only on generic skills 
+• 
+Penalties for clear domain mismatches 
+
+--- PAGE 50 ---
+ 
+44 
+ 
+ 
+Re-ranking logic: match_controller.py (line 224) 
+Recruiter Re-Ranking Snippet 
+ 
+match_controller.py (line 240) 
+This additional step improves the practical relevance of recruiter-side rankings. It helps reduce cases 
+where candidates appear suitable based on general similarity but lack the specific skills required for 
+the role. By incorporating domain-aware adjustments, the system produces results that are more 
+aligned with real recruitment expectation. 
+
+--- PAGE 51 ---
+ 
+45 
+ 
+5.9. Explanation Generation and Missing Skills 
+One of the key aims of the system was not only to return a match score, but also to explain why a CV 
+and job description were considered a strong or weak match. This was important for transparency, 
+as users are more likely to trust results when they can understand the reasoning behind them. 
+To support this, the system identifies both matching skills and missing skills during the analysis 
+stage. After skills are extracted from the CV and the job description, the two sets are compared to 
+determine which required skills are present and which are missing. These outputs are then included 
+in the match response returned by the backend. 
+The main analysis is performed in the multi_step_match_analysis() function, where the system 
+extracts skills, compares them, and calculates the final hybrid score. This function returns structured 
+outputs such as matching_skills and missing_skills, which are later used to generate explanations for 
+the frontend. 
+ 
+Analysis logic: cvService.py (line 376) 
+ 
+ 
+ 
+ 
+ 
+
+--- PAGE 52 ---
+ 
+46 
+ 
+Analysis Output Snippet 
+ 
+cvService.py (line 410) 
+The explanation text shown to users is generated using the generate_match_explanation() function. 
+This function converts the score and extracted skills into a short natural language explanation. For 
+example, it may state that a candidate is a strong match due to strong skill alignment, or that the 
+score is lower because several important skills are missing. 
+Explanation generation logic: cvService.py (line 463) 
+ 
+Explanation Generation Snippet 
+ 
+cvService.py (line 471) 
+ 
+
+--- PAGE 53 ---
+ 
+47 
+ 
+These explanations are included in the API response so they can be displayed in the frontend. In 
+addition to the overall explanation, the system also returns the exact matching and missing skills, 
+allowing users to clearly see which areas are strong and which require improvement. 
+ 
+Match response generation: match_controller.py (line 560) 
+ 
+Match Response Snippet 
+ 
+match_controller.py (line 565) 
+This feature significantly improves the usability of the system. Instead of only presenting a numerical 
+score, the system provides clear and actionable feedback. This is particularly useful for job seekers, 
+as it allows them to understand why they were matched and what skills they may need to improve. 
+ 
+5.10. Frontend Development Using Streamlit 
+The frontend of the system was developed using Streamlit. This framework was chosen because it 
+allows rapid development of interactive interfaces without the complexity of traditional frontend 
+frameworks. It was particularly suitable for this project, as the system needed to display uploaded 
+files, ranked results, explanations, and support different user workflows. 
+ 
+Frontend entry point: app.py (line 1) 
+ 
+Job Seeker Portal 
+The Job Seeker Portal allows users to: 
+• 
+Upload a CV 
+• 
+View matched job results 
+• 
+Inspect match scores and rankings 
+• 
+Review matching and missing skills 
+Job seeker page: job_seeker_portal.py (line 1) 
+Recruiter Portal 
+The Recruiter Portal allows users to: 
+• 
+Upload job descriptions 
+• 
+Retrieve ranked candidate matches 
+• 
+Review explanations for scores 
+
+--- PAGE 54 ---
+ 
+48 
+ 
+• 
+Analyse candidate skill coverage and gaps 
+Recruiter page: recruiter_portal.py (line 1) 
+The interface was designed to be simple and easy to navigate. A key focus was presenting results in a 
+clear and understandable way, rather than displaying only raw similarity scores. This was important 
+because explainability is a core objective of the project, and users need to understand how and why 
+results are generated. 
+ 
+5.11. Challenges Faced During Development 
+Several challenges were encountered during the development of the system and addressing them 
+led to important improvements in the final implementation. 
+The first challenge was related to data quality. Resume and job datasets often lacked consistent 
+formatting and did not always present skills in a clearly structured way. This made early extraction 
+and comparison less reliable. To address this, the preprocessing stage was improved and a skill 
+normalisation approach was introduced. FAISS indexes were also rebuilt when necessary to ensure 
+consistency across stored vectors. 
+ 
+The second challenge involved misleading keyword overlap. Early results showed that generic terms 
+such as “communication”, “teamwork”, and “leadership” appeared frequently across many 
+documents. Treating these skills equally to domain-specific skills led to inflated and unrealistic match 
+scores. This issue was addressed by distinguishing between generic transferable skills and core 
+domain skills and weighting them differently during scoring. 
+The third challenge was that FAISS similarity retrieval alone was not sufficient. While FAISS efficiently 
+returned the closest vectors, some of these results were still weak matches when examined in more 
+detail. This led to the introduction of a hybrid matching approach, where FAISS is used as the 
+retrieval stage and a second stage scoring process is applied to produce the final ranking. 
+The fourth challenge was observed in recruiter-side matching. Recruiters typically expect stronger 
+occupational relevance than general textual similarity. Some early results were too broad, 
+particularly for roles such as marketing or service-based positions. To improve this, a recruiter-side 
+re-ranking stage was introduced, allowing domain alignment and core skills to have a greater 
+influence on the final score. 
+The fifth challenge was ensuring consistency and explainability. A key requirement of the project 
+was that the system should produce repeatable results and provide clear reasoning for match 
+outcomes. To achieve this, the implementation used deterministic preprocessing, rule-based skill 
+normalisation, fixed-length vector generation, and structured explanations based on matching and 
+missing skills. This made the system outputs more stable and easier for users to understand. 
+ 
+5.11. Conclusions 
+This chapter outlined how the AI Career Advisor system was developed and implemented as a 
+working prototype based on the design presented in Chapter 4. The final system successfully 
+integrates a Streamlit frontend, a FastAPI backend, SQLite for data storage, and FAISS for efficient 
+vector-based retrieval. 
+
+--- PAGE 55 ---
+ 
+49 
+ 
+The implementation goes beyond a simple keyword-based matching system. A complete processing 
+pipeline was developed, starting from CV and job uploads, followed by text preprocessing, skill 
+extraction, embedding generation, FAISS-based retrieval, hybrid scoring, and recruiter-side re-
+ranking. This allowed the system to produce more meaningful and explainable results for both job 
+seekers and recruiters. 
+During development, it became clear that similarity search alone was not sufficient for accurate 
+recruitment matching. As a result, additional scoring logic and domain-aware adjustments were 
+introduced to improve result quality and reduce misleading matches. These improvements 
+strengthened the overall effectiveness of the system and made the outputs more relevant in realistic 
+scenarios. 
+ 
+ 
+
+--- PAGE 56 ---
+ 
+50 
+ 
+6. Testing and Evaluation 
+ 
+6.1. Introduction 
+This chapter evaluates the performance and behaviour of the AI Career Advisor system. The aim of 
+this evaluation is not only to verify that the system functions correctly, but also to assess how well it 
+meets user requirements in terms of accuracy, consistency, usability, and transparency. 
+Testing was carried out throughout development and included both component-level testing and full 
+system evaluation. The final evaluation was performed using a combination of controlled test cases 
+and large-scale dataset testing to analyse the effectiveness of the matching system. 
+ 
+6.2. System Testing 
+System testing was carried out to ensure that all components of the application work correctly both 
+individually and when integrated together. Testing was performed incrementally during 
+development, allowing issues to be identified and resolved early. 
+6.2.1 Component Level Testing 
+Individual components of the system were tested to ensure they function correctly in isolation. This 
+included: 
+• 
+CV upload and parsing 
+• 
+Job posting upload 
+• 
+Text preprocessing and skill extraction 
+• 
+Embedding generation 
+• 
+FAISS retrieval functions 
+• 
+Matching and scoring logic 
+ 
+Each component was tested with sample inputs to verify expected outputs, ensuring that data flows 
+correctly through the system. 
+ 
+6.2.2 Integration Testing 
+Integration testing ensured that all parts of the system work together as expected. This included: 
+• 
+Frontend (Streamlit) communicating with backend (FastAPI) 
+• 
+Backend interacting with the database and FAISS indexes 
+• 
+End-to-end workflows for both job seeker and recruiter flows 
+Testing confirmed that data is correctly passed between components and that results are displayed 
+correctly across both portals. 
+6.2.3 System Testing 
+ 
+6.3. System Evaluation 
+ 
+
+--- PAGE 57 ---
+ 
+51 
+ 
+The system was evaluated using both controlled test cases and larger-scale dataset samples to 
+assess the effectiveness of the hybrid matching approach. 
+The evaluation used: 
+• 
+The current job postings stored in the database 
+• 
+The current resumes stored and processed in the system 
+• 
+Separate FAISS indexes for job postings and resumes 
+This allowed testing across both controlled and more realistic scenarios. 
+ 
+6.3.1 Matching Approaches Compared 
+Four approaches were analysed: 
+• 
+ATS-style keyword matching 
+• 
+TF-IDF similarity 
+• 
+Embedding-based similarity 
+• 
+Hybrid scoring 
+The hybrid model combines semantic similarity, skill overlap, and missing skill analysis to produce 
+more balanced and explainable results. 
+Approach 
+Strengths 
+Weaknesses 
+Performance in 
+Project 
+ATS (Keyword 
+Matching) 
+Simple and fast  
+Easily misled by 
+keyword overlap 
+Produced false 
+positives 
+TF-IDF 
+Better text similarity 
+Still depends on 
+wording 
+Moderate accuracy 
+Embeddings 
+Captures semantic 
+meaning 
+Lacks structure alone 
+Improved flexibility 
+Hybrid Scoring 
+Combines multiple 
+factors 
+More complex to 
+implement 
+Best overall 
+performance 
+ 
+ 
+6.3.2 Controlled Test Cases 
+Ten controlled scenarios were created to evaluate specific behaviours: 
+• 
+Strong match 
+• 
+Moderate match 
+• 
+Weak match 
+• 
+Semantic match (different wording) 
+• 
+Misleading keyword match 
+• 
+Strong technical / weak soft skills 
+• 
+Strong soft / weak technical skills 
+• 
+Keyword overlap but incorrect domain 
+• 
+Semantic variation 
+• 
+Empty CV 
+• 
+Key Results 
+
+--- PAGE 58 ---
+ 
+52 
+ 
+• 
+Strong matches scored close to 0.95 
+• 
+Moderate matches ranged between 0.5–0.65 
+• 
+Weak matches were close to 0.0 
+Misleading Keyword Case 
+The misleading keyword test case showed an important improvement: 
+• 
+ATS produced a moderate score 
+• 
+The hybrid system reduced this to a weak match 
+This shows that the system avoids false positives caused by keyword overlap. 
+Semantic Matching 
+• 
+TF-IDF struggled when wording differed 
+• 
+Embeddings captured semantic similarity 
+• 
+Hybrid scoring produced more balanced results 
+This confirms improved flexibility compared to keyword-only approaches. 
+Edge Case Handling 
+The system handled difficult cases effectively: 
+• 
+Empty CV = score of 0.0 
+• 
+Incorrect domain = weak match 
+• 
+Missing skills = clearly identified 
+This shows the system avoids misleading outputs. 
+ 
+Test Case 
+Desc 
+Expected 
+Behaviour 
+Actual Outcome 
+Result 
+Strong Match 
+CV closely 
+matches job 
+requirements 
+High score 
+(>0.75) 
+Score 0.9+, 
+strong match 
+Pass 
+Moderate Match 
+Partial overlap in 
+skills 
+Medium score 
+(0.5–0.7) 
+Score 0.6, 
+moderate match 
+Pass 
+Weak Match 
+Minimal skill 
+overlap 
+Low score (<0.4) 
+Score 0.1–0.2, 
+weak match 
+Pass 
+Semantic Match 
+Similar meaning, 
+different wording 
+Reasonable score 
+despite low 
+keywords 
+Embeddings 
+improved match 
+Pass 
+Misleading 
+Keywords 
+Keyword overlap 
+but irrelevant 
+context 
+Reduced score 
+after analysis 
+Hybrid model 
+lowered score 
+Pass 
+Strong Tech, 
+Weak Soft 
+High technical 
+skills, poor soft 
+skills 
+Balanced score 
+Moderate score 
+produced 
+Pass 
+Strong Soft, 
+Weak Tech 
+Strong soft skills, 
+weak technical 
+Lower score 
+Weak/moderate 
+result 
+Pass 
+
+--- PAGE 59 ---
+ 
+53 
+ 
+Wrong Domain 
+Skills do not 
+match job 
+domain 
+Weak match 
+Low score 
+produced 
+Pass 
+Semantic 
+Variation 
+Different 
+phrasing, same 
+meaning 
+Moderate match 
+Reasonable score 
+Pass 
+Empty CV 
+No useful data 
+Score = 0 
+Score = 0 
+Pass 
+ 
+ 
+6.3.3 Larger-Scale Evaluation 
+The system was evaluated using larger dataset samples from the available job and resume data. 
+Job Seeker Results 
+• 
+Average scores were generally low 
+• 
+Most matches were weak 
+• 
+Strong matches were less frequent 
+This reflects realistic conditions where most candidates are not highly relevant to most jobs. 
+Recruiter Results 
+• 
+More moderate matches were observed 
+• 
+Some strong matches appeared depending on role and dataset 
+This indicates improved retrieval when matching jobs to a larger pool of candidates. 
+ 
+6.3.4 Recruiter Side Improvements 
+Initial recruiter-side results were often too generic and lacked domain relevance. 
+To improve this, a domain-aware re-ranking step was introduced: 
+• 
+Job roles mapped to likely resume categories 
+• 
+Score adjustments applied based on domain relevance 
+• 
+Influence of generic skills reduced 
+Improved Results 
+After re-ranking, recruiter-side results showed improved domain alignment, with more relevant 
+resume categories appearing higher in ranked results across legal, healthcare, technical, and 
+marketing roles. 
+However, some noise remains, particularly in cases where resumes contain broad or generic skills. 
+Stage 
+Behaviour 
+Issue 
+Improvement 
+Initial Retrieval 
+Embedding-based 
+results 
+Generic and less 
+relevant matches 
+Identified need for 
+refinement 
+After Re-Ranking 
+Domain-aware 
+adjustment applied 
+Still some noise 
+Improved category 
+alignment 
+
+--- PAGE 60 ---
+ 
+54 
+ 
+Final Behaviour 
+More relevant 
+categories appear 
+higher 
+Not perfect 
+Better overall ranking 
+quality 
+ 
+6.4. Evaluate Project Management 
+6.4.1 Evaluate Project Plan 
+The initial project plan provided a clear structure, particularly during the research and design phases. 
+However, the complexity of implementing the NLP pipeline and FAISS-based retrieval required more 
+time than originally expected. Evaluation took more time than expected due to the focus on 
+accuracy with matching. 
+ 
+6.4.1 Evaluate Project Execution 
+The project was developed iteratively, starting with a TF-IDF-based prototype and progressing to a 
+hybrid matching system. 
+Challenges such as dataset inconsistencies, duplicate data, and recruiter-side inaccuracies were 
+addressed through dataset cleaning, FAISS restructuring, and the introduction of re-ranking logic. 
+ 
+6.6. Conclusions 
+The evaluation demonstrates that the system successfully combines multiple techniques to improve 
+job and candidate matching compared to traditional approaches. 
+The hybrid matching system, combined with FAISS-based retrieval and re-ranking, provides a 
+practical prototype and a strong foundation for future improvement and scaling. 
+ 
+ 
+ 
+ 
+
+--- PAGE 61 ---
+ 
+55 
+ 
+7. Conclusions and Future Work 
+ 
+7.1. Introduction 
+This chapter provides a final overview of the AI Career Advisor project, summarising the key 
+outcomes, evaluating how the project met its objectives, and identifying limitations and areas for 
+future improvement. 
+7.2. Summary of Achievements 
+The aim of this project was to design and implement an AI-powered career advisory platform that 
+supports both job seekers and recruiters through intelligent matching and feedback 
+This aim was successfully achieved through the development of a functional full-stack prototype. 
+The system allows job seekers to upload CVs and receive matched job recommendations, while 
+recruiters can upload job postings and view ranked candidate matches. 
+A key achievement of the project was the implementation of a hybrid matching system that 
+combines semantic similarity, skill overlap, and missing skill analysis. This approach improved the 
+quality of results compared to traditional keyword-based methods and allowed the system to 
+produce more balanced and meaningful matches. 
+Another important contribution was the use of FAISS vector indexes to support efficient similarity 
+retrieval. The decision to implement two separate FAISS indexes for job postings and resumes 
+enabled bidirectional matching, supporting both job recommendation and candidate ranking. 
+The system also provides explainable outputs, including match scores, matching skills, and missing 
+skills. This directly addresses the lack of transparency identified in existing recruitment systems and 
+improves user understanding and trust. 
+Overall, the system demonstrates a practical implementation of an AI-driven matching platform that 
+aligns with the original project objectives. 
+7.3. Key Findings 
+The evaluation of the system highlighted several important findings: 
+• 
+Traditional keyword-based approaches are limited and can produce misleading results when 
+keyword overlap does not reflect true relevance. 
+• 
+TF-IDF improves similarity measurement but remains sensitive to wording differences. 
+• 
+Embedding-based approaches capture semantic meaning but require additional structure to 
+produce reliable results. 
+• 
+The hybrid scoring approach provides the most balanced and accurate results by combining 
+multiple techniques. 
+The evaluation also showed that explainable outputs significantly improve the usability of the 
+system. Providing users with clear feedback, such as missing skills and match reasoning, makes the 
+system more transparent and easier to trust. 
+Additionally, recruiter-side results improved after the introduction of domain-aware re-ranking, 
+although some variability remains depending on the dataset. 
+ 
+
+--- PAGE 62 ---
+ 
+56 
+ 
+7.4. Limitations 
+Despite achieving its main objectives, the project has several limitations. 
+Firstly, the system was developed as a prototype and does not operate at a large production scale. 
+While the architecture is modular, further work would be required to support high-volume, real-
+time usage. 
+Secondly, the dataset used for evaluation has limitations. Resume data can contain inconsistencies, 
+duplicates, and broad category labels, which can affect matching accuracy. The system also relies on 
+the quality of input data, meaning poorly structured CVs may reduce performance. 
+Another limitation is that the system focuses primarily on skill-based matching and does not fully 
+account for factors such as experience level, soft skills depth, or career progression. 
+Finally, while fairness and consistency were considered in the design, formal bias detection and 
+evaluation were not implemented. This means the system does not currently assess potential bias 
+across different groups. 
+7.5. Future Work 
+There are several opportunities to extend and improve the system in future work. One key area is 
+the integration of real-world job data through APIs, allowing the system to provide live job 
+recommendations rather than relying on static datasets. 
+The matching system could also be enhanced by incorporating more advanced NLP techniques, such 
+as improved skill extraction or contextual understanding of experience. Integration with large 
+language models could further improve explanation quality and provide more personalised 
+feedback. 
+Another area for improvement is the introduction of bias detection and fairness evaluation 
+mechanisms, ensuring that the system produces equitable results across different user groups. 
+From a system perspective, deploying the application to a cloud environment would allow for 
+improved scalability, performance, and accessibility. This would enable the system to support a 
+larger number of users in real-world scenarios. 
+Finally, the user interface could be further refined by adding advanced analytics, visualisations, and 
+interactive features to improve the overall user experience. 
+ 
+7.6. Conclusions 
+In conclusion, this project successfully demonstrates the design and implementation of an AI-driven 
+career advisory system that supports both job seekers and recruiters. The combination of FAISS-
+based retrieval, hybrid scoring, and explainable outputs provides a more transparent and effective 
+alternative to traditional recruitment approaches. 
+While the system remains a prototype, it establishes a strong foundation for further development 
+and highlights the potential of combining multiple techniques to improve job and candidate 
+matching. 
+ 
+ 
+
+--- PAGE 63 ---
+ 
+57 
+ 
+References 
+A Guide to Artificial Intelligence Resume Screening. (n.d.). Retrieved from HiringBranch: 
+https://www.hiringbranch.com/blog/artificial-intelligence-resume-screening 
+Agentic AI Talent Platform for Smarter Hiring. (n.d.). Retrieved from SeekOut: 
+https://www.seekout.com/ 
+AI Career Coach. (n.d.). Retrieved from Sapia.ai: https://sapia.ai/phai/ 
+AI talent acquisition & recruiting platform. (n.d.). Retrieved from Eightfold: https://eightfold.ai/ 
+Applicant Tracking Systems: Everything You Need to Know. (n.d.). Retrieved from Jobscan: 
+https://www.jobscan.co/applicant-tracking-systems 
+Atlassian. (n.d.). Waterfall Methodology: A Comprehensive Guide. Retrieved from Atlassian: 
+https://www.atlassian.com/agile/project-management/waterfall-methodology 
+Atlassian. (n.d.). What is Agile? Retrieved from Atlassian: https://www.atlassian.com/agile 
+Candidate AI Agent. (n.d.). Retrieved from Fountain: https://www.fountain.com/hire/candidate-ai 
+Çano, E. (2017). Hybrid Recommender Systems: A Systematic Literature Review. Retrieved from 
+Research Gate: 
+https://www.researchgate.net/publication/321281871_Hybrid_Recommender_Systems_A_
+Systematic_Literature_Review 
+Dadaboyev. (2025, Sept 05). Role of artificial intelligence in employee recruitment: systematic review 
+and future research directions. Retrieved from Springer Nature Link: 
+https://doi.org/10.1007/s44282-025-00246-w 
+Deniz, B. İ. (2021). Hybrid Recommender System. Retrieved from Kaggle: 
+https://www.kaggle.com/code/iambideniz/hybrid-recommender-system 
+FastAPI. (n.d.). Retrieved from Tiangolo: https://fastapi.tiangolo.com/ 
+Ferrazzi. (2025, March 27). The AI Recruitment Takeover: Redefining Hiring In The Digital Age. 
+Retrieved from Forbes: https://www.forbes.com/sites/keithferrazzi/2025/03/27/the-ai-
+recruitment-takeover-redefining-hiring-in-the-digital-age/ 
+Fountain AI Recruiter. (n.d.). Retrieved from Fountain: https://www.fountain.com/airecruiter 
+geeksforgeeks. (2025, Jul 11). What is Spiral Model in Software Engineering? Retrieved from 
+geeksforgeeks: https://www.geeksforgeeks.org/software-engineering/software-
+engineering-spiral-model/ 
+Glassberg. (2025, 09 01). The key role of design and transparency in enhancing trust in AI-powered 
+digital agents. Retrieved from sciencedirect: 
+https://www.sciencedirect.com/science/article/pii/S2444569X25001155 
+Horodyski. (2023, 08 01). Applicants' perception of artificial intelligence in the recruitment process. 
+Retrieved from sciencedirect: 
+https://www.sciencedirect.com/science/article/pii/S2451958823000362 
+
+--- PAGE 64 ---
+ 
+58 
+ 
+Jacob Devlin, M.-W. C. (2018, Oct 11). BERT: Pre-training of Deep Bidirectional Transformers for 
+Language Understanding. Retrieved from Cornell University: 
+https://arxiv.org/abs/1810.04805 
+LinkedIn . (2025). AI Transparency in Hiring Assistant | LinkedIn Recruiter. Retrieved from LinkedIn : 
+https://business.linkedin.com/talent-solutions/ai-transparency 
+Lynn, R. (n.d.). What is FDD in Agile? Retrieved from planview: 
+https://www.planview.com/resources/articles/fdd-agile/ 
+Meta. (n.d.). Welcome to Faiss Documentation. Retrieved from Faiss : https://faiss.ai/ 
+Mikolov, T. &. (2013). Efficient Estimation of Word Representations in Vector Space. Proceedings of 
+Workshop at ICLR: ResearchGate. 
+Nastoska, A. (2025, June 30). Evaluating Trustworthiness in AI: Risks, Metrics, and Applications 
+Across Industries. Retrieved from MDPI: https://www.mdpi.com/2079-9292/14/13/2717 
+RecruitEdge | Mantrika.ai. (2025, 03 28). Retrieved from Mantrika: https://mantrika.ai/recruitedge/ 
+Rosvall, L. (2024, Mar 24). A summary of the paper “Why Should I Trust You?” Explaining the 
+Predictions of Any Classifier. Retrieved from Medium: https://medium.com/@lucasrosvall/a-
+summary-of-the-paper-why-should-i-trust-you-explaining-the-predictions-of-any-classifier-
+e3eed1ff8c50 
+Sameer. (2024, May 17). Reconsidering the Use of AI in Applicant Tracking Systems: A Call for 
+Transparency and Fairness. Retrieved from LinkedIn: 
+https://www.linkedin.com/pulse/reconsidering-use-ai-applicant-tracking-systems-call-
+sameer-uipbc 
+Streamlit • A faster way to build and share data apps. (2021, 01 14). Retrieved from Streamlit : 
+https://streamlit.io/ 
+Tomas Mikolov, K. C. (2013, Jan 16). Efficient Estimation of Word Representations in Vector Space. 
+Retrieved from Cornell University: https://arxiv.org/abs/1301.3781 
+Wojciech Samek, T. W.-R. (2017). EXPLAINABLE ARTIFICIAL INTELLIGENCE: 
+UNDERSTANDING,VISUALIZING AND INTERPRETING DEEP LEARNING MODELS. Berlin: 
+SamITU. 
+ 
+ 
+ 
+
+--- PAGE 65 ---
+ 
+A - 1 
+Appendix A: System Model and Analysis 
+ 
+Details of Requirements gathering and analysis method 
+ 
+ 
+ 
+ 
+
+--- PAGE 66 ---
+ 
+B - 1 
+B 1 
+Appendix B: Design  
+ 
+ 
+
+--- PAGE 67 ---
+ 
+B - 2 
+B 2 
+ 
+ 
+
+--- PAGE 68 ---
+ 
+B - 3 
+B 3 
+ 
+ 
+ 
+
+--- PAGE 69 ---
+ 
+B - 4 
+B 4 
+ 
+ 
+Wire Frames for the dual portal structure: 
+Login Page 
+
+--- PAGE 70 ---
+ 
+B - 5 
+B 5 
+ 
+ 
+Job Seeker Portal: 
+ 
+ 
+Recruiter Portal: 
+
+--- PAGE 71 ---
+ 
+B - 6 
+B 6 
+ 
+
+--- PAGE 72 ---
+ 
+C - 1 
+C 1 
+Appendix C: Prompts Used with Gen AI  
+ 
+ChatGPT, CoPilot, Claude etc. 
+ 
+ 
+C.1 Prompts related to Report Writing 
+ 
+ 
+ 
+C.2 Prompts Related to Research  
+ 
+ 
+ 
+ 
+C.3 Prompts Related to Design 
+ 
+ 
+ 
+C.4 Prompts Related to Coding 
+ 
+ 
+C.5 Other Prompts Related to Proejct  
+ 
+ 
+ 
+ 
+
+--- PAGE 73 ---
+ 
+D - 1 
+Appendix D: Additional Code Samples 
+ 
+Provide additional code samples  
+Organised by Logical Architecture 
+ 
+ 
+ 
+
+--- PAGE 74 ---
+ 
+E - 1 
+Appendix E:  
+ 
+Other Appendix 
+ 
+ 
+ 
+ 

@@ -1,0 +1,262 @@
+
+--- PAGE 1 ---
+ 
+Feedback on AI Career Advisor Report 
+1. Overall Structure & Completeness 
+• 
+The report has a strong structure and logical flow (Introduction → Literature → Analysis → 
+Design → Evaluation). 
+• 
+However, several sections are incomplete or placeholders, which must be finished: 
+o 
+Acknowledgements (currently “Body text”) 
+o 
+Section 4.5.1 (Fulfilment of System Requirements) 
+o 
+Chapter 5 (Development – mostly empty) 
+o 
+Chapter 7 (Conclusions & Future Work – empty) 
+o 
+Appendix E is empty 
+• 
+ Action: Complete all missing sections before submission — this is critical for grading. 
+2. Abstract (Page i) 
+• 
+Well-written and clearly explains the problem, solution, and technologies. 
+• 
+Minor issue: slightly wordy and repetitive in places. 
+ Suggestions: 
+• 
+Reduce repetition of “AI and NLP” 
+• 
+Add 1–2 lines on evaluation results (very important for a strong abstract) 
+3. Introduction (Chapter 1) 
+• 
+Strong motivation using personal experience (SAP internship) — very good. 
+• 
+Clearly explains the problem and project need. 
+Issues: 
+• 
+Grammar mistakes: 
+o 
+“AI I was a necessity” → should be “AI was a necessity” 
+o 
+“both side of the recruitment process” → “both sides” 
+• 
+Some sentences are too long and informal. 
+ Action: 
+• 
+Proofread for grammar and academic tone 
+• 
+Make language more formal (avoid conversational tone) 
+4. Literature Review (Chapter 2) 
+Strengths: 
+• 
+Good coverage of real-world tools (Eightfold, Workday, etc.) 
+• 
+Strong identification of research gap (lack of transparency) 
+Issues: 
+• 
+References are not properly formatted consistently 
+
+--- PAGE 2 ---
+• 
+Some claims lack proper citation formatting (e.g., LinkedIn stats) 
+• 
+Too descriptive — needs more critical analysis 
+ Action: 
+• 
+Add comparison table of systems (very high impact improvement) 
+• 
+Critically analyse: 
+o 
+What they do well 
+o 
+What they lack 
+o 
+How your system improves it 
+5. System Analysis (Chapter 3) 
+Strengths: 
+• 
+Very strong section overall 
+• 
+Survey + stakeholder analysis is excellent 
+• 
+Use of diagrams (Use case, flowcharts) is good 
+(Example: diagrams on pages 15–17 clearly show workflows) 
+Issues: 
+• 
+Some repetition between sections (3.1 and 3.2) 
+• 
+Survey analysis could be deeper 
+ Action: 
+• 
+Add interpretation of results (not just percentages) 
+o 
+Example: “This indicates users strongly need feedback systems…” 
+• 
+Reduce repetition 
+6. System Design (Chapter 4) 
+Strengths: 
+• 
+Good explanation of architecture (Frontend, Backend, FAISS) 
+• 
+Methodology comparison (Waterfall vs Agile vs Spiral) is strong 
+Issues: 
+• 
+Section 4.5.1 (Fulfilment of Requirements) is missing 
+• 
+No diagram explicitly mapping requirements → system 
+ Action: 
+• 
+Add: 
+o 
+Table: Requirement → Implementation 
+o 
+Example: 
+Requirement 
+Implementation 
+CV Parsing 
+FastAPI NLP pipeline 
+Matching 
+FAISS + Hybrid Scoring 
+
+--- PAGE 3 ---
+ 
+7. Development (Chapter 5) 
+  Major Issue: This section is incomplete 
+• 
+Currently almost empty 
+• 
+This is one of the most important chapters 
+  You MUST add: 
+• 
+Backend implementation (FastAPI endpoints) 
+• 
+NLP pipeline steps 
+• 
+FAISS integration 
+• 
+Code snippets (important!) 
+• 
+Challenges faced 
+8. Testing & Evaluation (Chapter 6) 
+Strengths: 
+• 
+One of the strongest sections in the report 
+• 
+Clear comparison of: 
+o 
+ATS vs TF-IDF vs Embeddings vs Hybrid 
+• 
+Controlled test cases are excellent 
+• 
+Tables and results are well presented (pages 29–31) 
+Minor Issues: 
+• 
+Some repetition in explanations 
+• 
+Could include visual graphs (bar charts, etc.) 
+Action: 
+• 
+Add 1–2 graphs for: 
+o 
+Model comparison 
+o 
+Score distributions 
+9. Conclusions & Future Work (Chapter 7) 
+ Missing content 
+ Must include: 
+• 
+Summary of achievements 
+• 
+Key findings (very important) 
+• 
+Limitations: 
+o 
+Dataset size 
+o 
+Bias 
+o 
+Prototype nature 
+• 
+Future work: 
+o 
+Real-time job integration 
+o 
+Advanced LLM integration 
+o 
+Bias detection 
+
+--- PAGE 4 ---
+10. Referencing & Citations 
+Issues: 
+• 
+Inconsistent referencing style 
+• 
+Some references incomplete 
+• 
+URLs not properly formatted 
+ Action: 
+• 
+Use Harvard or IEEE consistently 
+• 
+Use Zotero properly (as suggested in report) 
+11. Writing Quality & Grammar 
+Common Issues: 
+• 
+Minor grammar mistakes throughout 
+• 
+Some informal wording 
+• 
+Repetition of phrases 
+ Action: 
+• 
+Do a full grammar check (Grammarly recommended) 
+• 
+Improve academic tone: 
+o 
+Avoid “I liked”, “I found interesting” 
+o 
+Replace with formal phrasing 
+12. Diagrams & Visuals 
+Strengths: 
+• 
+Good use of: 
+o 
+System flow diagram (Page 2) 
+o 
+Use case diagram (Page 15) 
+o 
+Flowcharts (Pages 16–17) 
+Improvements: 
+• 
+Add: 
+o 
+Architecture diagram (clearer version) 
+o 
+Evaluation graphs 
+o 
+Requirement mapping diagram 
+13. Key Strengths of the Report 
+• 
+Strong problem definition 
+• 
+Real-world relevance 
+• 
+Good technical depth (FAISS + Hybrid model) 
+• 
+Excellent evaluation section 
+• 
+Clear dual-user system (job seeker + recruiter) 
+14. Key Improvements Required (Priority Order) 
+
+--- PAGE 5 ---
+1.  Complete missing chapters (5 & 7) 
+2.  Fix grammar and academic tone 
+3.  Add requirement fulfilment section 
+4.  Improve literature critical analysis 
+5.  Fix referencing format 
+6.  Add visuals/graphs in evaluation 
+7.  Reduce repetition 
+ 
