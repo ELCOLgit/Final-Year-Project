@@ -383,7 +383,7 @@ def get_matches_for_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     # create an embedding from the selected job text
-    job_text = job.description or ""
+    job_text = f"{job.title or ''} {job.description or ''}".strip()
     job_embedding = generate_embedding(job_text)
 
     # search the separate resume faiss index for the closest resumes
@@ -409,27 +409,30 @@ def get_matches_for_job(
         analysis = multi_step_match_analysis(resume_text, job_text, embedding_score=embedding_score)
         rerank_data = rerank_recruiter_match(job, resume, metadata, analysis)
         final_score = rerank_data["recruiter_score"]
+        generated_at = datetime.utcnow()
 
-        # save or update the ranked result in the matches table
-        saved_match = (
-            db.query(Match)
-            .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
-            .first()
-        )
-        if saved_match:
-            saved_match.match_score = final_score
-            saved_match.generated_at = datetime.utcnow()
-        else:
-            saved_match = Match(
-                user_id=resume.user_id,
-                resume_id=resume.id,
-                job_posting_id=job.id,
-                match_score=final_score,
-                created_at=datetime.utcnow(),
-                generated_at=datetime.utcnow(),
+        saved_match = None
+        if resume.user_id is not None:
+            # only persist recruiter rankings for resumes that belong to a real user account
+            saved_match = (
+                db.query(Match)
+                .filter(Match.resume_id == resume.id, Match.job_posting_id == job.id)
+                .first()
             )
-            db.add(saved_match)
-            db.flush()
+            if saved_match:
+                saved_match.match_score = final_score
+                saved_match.generated_at = generated_at
+            else:
+                saved_match = Match(
+                    user_id=resume.user_id,
+                    resume_id=resume.id,
+                    job_posting_id=job.id,
+                    match_score=final_score,
+                    created_at=generated_at,
+                    generated_at=generated_at,
+                )
+                db.add(saved_match)
+                db.flush()
 
         ranked_resumes.append({
             "resume_id": resume.id,
@@ -444,13 +447,21 @@ def get_matches_for_job(
             "core_skill_bonus": rerank_data["core_skill_bonus"],
             "generic_only_penalty": rerank_data["generic_only_penalty"],
             "domain_mismatch_penalty": rerank_data["domain_mismatch_penalty"],
-            "generated_at": saved_match.generated_at,
+            "generated_at": saved_match.generated_at if saved_match else generated_at,
             "reasoning": {
                 "matching_skills": analysis.get("matching_skills", []),
                 "missing_skills": analysis.get("missing_skills", []),
                 "core_matching_skills": analysis.get("core_matching_skills", []),
                 "generic_matching_skills": analysis.get("generic_matching_skills", []),
-                "explanation": generate_match_explanation(resume_text, job_text, final_score),
+                "embedding_score": analysis.get("embedding_score", 0.0),
+                "skill_overlap_score": analysis.get("skill_overlap_score", 0.0),
+                "penalty": analysis.get("penalty", 0.0),
+                "explanation": generate_match_explanation(
+                    resume_text,
+                    job_text,
+                    final_score,
+                    analysis=analysis,
+                ),
             },
         })
 
@@ -520,7 +531,7 @@ def search_matches_for_resume(
             continue
 
         # read job text and metadata so we can build a richer response
-        job_text = job.description or ""
+        job_text = f"{job.title or ''} {job.description or ''}".strip()
         embedding_score = float(result.get("score", 0.0))
         analysis = multi_step_match_analysis(cv_text, job_text, embedding_score=embedding_score)
         final_score = float(analysis.get("final_score", 0.0))
@@ -564,7 +575,15 @@ def search_matches_for_resume(
             "reasoning": {
                 "matching_skills": matching_skills,
                 "missing_skills": missing_skills,
-                "explanation": generate_match_explanation(cv_text, job_text, final_score),
+                "embedding_score": analysis.get("embedding_score", 0.0),
+                "skill_overlap_score": analysis.get("skill_overlap_score", 0.0),
+                "penalty": analysis.get("penalty", 0.0),
+                "explanation": generate_match_explanation(
+                    cv_text,
+                    job_text,
+                    final_score,
+                    analysis=analysis,
+                ),
             },
         })
 

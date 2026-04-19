@@ -119,6 +119,19 @@ def get_latest_resume_id_with_matches(top_matches, resume_id_by_filename):
     return latest_resume_id
 
 
+def get_latest_resume_id(all_resumes):
+    # fall back to the most recently uploaded resume for the current user
+    if not all_resumes:
+        return None
+
+    sorted_resumes = sorted(
+        all_resumes,
+        key=lambda item: str(item.get("upload_date", "")),
+        reverse=True,
+    )
+    return sorted_resumes[0].get("id")
+
+
 def replace_current_match_results(resume_id, matches, match_error=None):
     # replace old match state so every tab reads the same fresh results
     cleaned_matches = unique_by_id(matches or [], "job_id")
@@ -189,8 +202,13 @@ def get_score_display(match):
     }
 
 
-def build_skill_improvement_suggestions(missing_skills):
-    # turn missing skills into simple cv improvement advice
+def build_skill_improvement_suggestions(
+    missing_skills,
+    embedding_score=0,
+    matching_skills=None,
+    job_title="this job",
+):
+    # turn missing skills and weaker semantic alignment into simple cv improvement advice
     suggestion_lines = []
 
     for skill in missing_skills[:3]:
@@ -204,6 +222,26 @@ def build_skill_improvement_suggestions(missing_skills):
             suggestion_lines.append("Mention office tools if you have used them in class, work, or projects.")
         else:
             suggestion_lines.append(f"Add clear evidence of {skill} if you have used it in your work, projects, or studies.")
+
+    if not missing_skills and embedding_score < 75:
+        top_matching_skills = sorted(set(matching_skills or []))[:3]
+        matching_text = format_skills(top_matching_skills) if top_matching_skills else "your strongest relevant skills"
+        suggestion_lines.extend(
+            [
+                (
+                    f"Tailor your professional summary for {job_title} so it clearly mirrors the role focus, "
+                    f"not just the extracted skills."
+                ),
+                (
+                    f"Add stronger project or experience bullets showing how you used {matching_text} "
+                    f"in work that is close to this role."
+                ),
+                (
+                    "Reuse important job wording naturally in your CV, especially around responsibilities, "
+                    "tools, and the type of systems you worked on."
+                ),
+            ]
+        )
 
     if not suggestion_lines:
         suggestion_lines.append("Your current CV already covers the main skill gaps for this job.")
@@ -334,12 +372,13 @@ resume_id_by_filename = {resume["filename"]: resume["id"] for resume in all_resu
 
 if not search_resume_id and not shared_matches:
     latest_resume_id_with_matches = get_latest_resume_id_with_matches(top_matches, resume_id_by_filename)
+    latest_resume_id = latest_resume_id_with_matches or get_latest_resume_id(all_resumes)
 
     if top_matches_error:
         st.session_state["match_load_error"] = top_matches_error
-    elif latest_resume_id_with_matches:
-        loaded_matches, load_error = load_resume_matches(backend_url, headers, latest_resume_id_with_matches)
-        replace_current_match_results(latest_resume_id_with_matches, loaded_matches, load_error)
+    elif latest_resume_id:
+        loaded_matches, load_error = load_resume_matches(backend_url, headers, latest_resume_id)
+        replace_current_match_results(latest_resume_id, loaded_matches, load_error)
     else:
         replace_current_match_results(None, [], None)
 
@@ -654,7 +693,15 @@ with skills_tab:
         selected_matching_skills = selected_reasoning.get("matching_skills", [])
         selected_missing_skills = sorted(set(selected_reasoning.get("missing_skills", [])))
         selected_explanation = selected_reasoning.get("explanation", "No explanation available.")
-        improvement_suggestions = build_skill_improvement_suggestions(selected_missing_skills)
+        selected_embedding_score = round(float(selected_reasoning.get("embedding_score", 0.0)) * 100)
+        selected_skill_overlap_score = round(float(selected_reasoning.get("skill_overlap_score", 0.0)) * 100)
+        selected_penalty_score = round(float(selected_reasoning.get("penalty", 0.0)) * 100)
+        improvement_suggestions = build_skill_improvement_suggestions(
+            selected_missing_skills,
+            embedding_score=selected_embedding_score,
+            matching_skills=selected_matching_skills,
+            job_title=selected_skill_match.get("title", "this job"),
+        )
 
         top_skill_col_1, top_skill_col_2 = st.columns(2, gap="large")
 
@@ -669,6 +716,11 @@ with skills_tab:
                 st.metric("Final AI Match", selected_score_display["percentage_score"])
                 st.markdown(f"**Match Label:** {selected_score_display['match_label']}")
                 st.caption(f"Rating: {selected_score_display['rating_score']}")
+                st.caption(
+                    f"Semantic similarity: {selected_embedding_score}% | "
+                    f"Weighted skill alignment: {selected_skill_overlap_score}% | "
+                    f"Penalty: {selected_penalty_score}%"
+                )
 
         middle_skill_col_1, middle_skill_col_2 = st.columns(2, gap="large")
 
@@ -690,7 +742,7 @@ with skills_tab:
 
         with st.container(border=True):
             st.markdown("**Improvement Suggestions**")
-            if selected_missing_skills:
+            if selected_missing_skills or selected_embedding_score < 75:
                 for suggestion in improvement_suggestions:
                     st.write(f"- {suggestion}")
             else:

@@ -47,6 +47,12 @@ def fetch_json(url, headers=None, timeout=20):
         return None, "backend unavailable"
 
 
+@st.cache_data(show_spinner=False, ttl=120)
+def fetch_json_cached(url, token=None, timeout=20):
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    return fetch_json(url, headers=headers, timeout=timeout)
+
+
 def extract_skills_from_text(text):
     # use the same small skill list as the backend logic
     known_skills = [
@@ -69,16 +75,19 @@ def extract_skills_from_text(text):
     return found_skills
 
 
-def get_top_resume_skills(resume_list, headers):
-    # load each resume text and count how often each known skill appears
+def get_top_resume_skills(resume_list, token, max_resumes_to_scan=150):
+    # load a capped set of resume texts so the dashboard stays responsive
     skill_counter = Counter()
 
-    for resume in resume_list:
+    for resume in resume_list[:max_resumes_to_scan]:
         resume_id = resume.get("id")
         if resume_id is None:
             continue
 
-        resume_data, resume_error = fetch_json(f"{backend_url}/resumes/{resume_id}", headers=headers)
+        resume_data, resume_error = fetch_json_cached(
+            f"{backend_url}/resumes/{resume_id}",
+            token=token,
+        )
         if resume_error or not resume_data:
             continue
 
@@ -209,7 +218,7 @@ def load_comparison_results(job_id, candidates, headers):
     if job_error or not job_data:
         return [], job_error or "could not load job"
 
-    job_text = job_data.get("description", "")
+    job_text = f"{job_data.get('title', '')} {job_data.get('description', '')}".strip()
 
     for candidate in candidates:
         resume_id = candidate.get("resume_id")
@@ -294,6 +303,27 @@ if "viewer_resume_id" not in st.session_state:
 if "recruiter_ai_chat_history" not in st.session_state:
     st.session_state["recruiter_ai_chat_history"] = []
 
+if "recruiter_ai_notice" not in st.session_state:
+    st.session_state["recruiter_ai_notice"] = None
+
+if "dashboard_rankings" not in st.session_state:
+    st.session_state["dashboard_rankings"] = []
+
+if "dashboard_rankings_job_id" not in st.session_state:
+    st.session_state["dashboard_rankings_job_id"] = None
+
+if "latest_ranking_data" not in st.session_state:
+    st.session_state["latest_ranking_data"] = []
+
+if "latest_ranking_job_id" not in st.session_state:
+    st.session_state["latest_ranking_job_id"] = None
+
+if "latest_comparison_results" not in st.session_state:
+    st.session_state["latest_comparison_results"] = []
+
+if "latest_comparison_job_id" not in st.session_state:
+    st.session_state["latest_comparison_job_id"] = None
+
 # load page data
 jobs, jobs_error = fetch_json(f"{backend_url}/jobs/", headers=headers)
 resumes, resumes_error = fetch_json(f"{backend_url}/resumes/")
@@ -309,14 +339,7 @@ latest_job_title = jobs[0]["title"] if jobs else "none yet"
 selected_resume_data = None
 candidate_rankings = []
 dashboard_rankings = []
-top_resume_skills = get_top_resume_skills(resumes, headers)
-
-if jobs:
-    dashboard_rankings_data, _ = fetch_json(
-        f"{backend_url}/matches/by-job/{jobs[0]['id']}",
-        headers=headers,
-    )
-    dashboard_rankings = get_unique_rankings(dashboard_rankings_data or [])
+top_resume_skills = get_top_resume_skills(resumes, st.session_state["token"])
 
 header_left, header_right = st.columns([12, 1])
 with header_left:
@@ -375,7 +398,7 @@ with dashboard_tab:
         with chart_middle:
             st.markdown("<div class='section-title'>Most Common Skills</div>", unsafe_allow_html=True)
             st.markdown(
-                "<div class='section-subtitle'>Top 10 skills found across uploaded resumes.</div>",
+                "<div class='section-subtitle'>Top 10 skills found across a sample of uploaded resumes.</div>",
                 unsafe_allow_html=True,
             )
 
@@ -393,9 +416,25 @@ with dashboard_tab:
         with chart_right:
             st.markdown("<div class='section-title'>Top Match Scores</div>", unsafe_allow_html=True)
             st.markdown(
-                "<div class='section-subtitle'>Top ranked candidate scores for the latest job.</div>",
+                "<div class='section-subtitle'>Load the latest job rankings on demand to keep the page responsive.</div>",
                 unsafe_allow_html=True,
             )
+
+            if jobs and st.button("Load top matches", key="load_dashboard_rankings"):
+                with st.spinner("Loading top matches..."):
+                    dashboard_rankings_data, dashboard_rankings_error = fetch_json(
+                        f"{backend_url}/matches/by-job/{jobs[0]['id']}",
+                        headers=headers,
+                        timeout=60,
+                    )
+                    if dashboard_rankings_error:
+                        st.error(dashboard_rankings_error)
+                    else:
+                        st.session_state["dashboard_rankings"] = get_unique_rankings(dashboard_rankings_data or [])
+                        st.session_state["dashboard_rankings_job_id"] = jobs[0]["id"]
+
+            if st.session_state.get("dashboard_rankings_job_id") == (jobs[0]["id"] if jobs else None):
+                dashboard_rankings = st.session_state.get("dashboard_rankings", [])
 
             if dashboard_rankings:
                 score_df = pd.DataFrame(
@@ -406,7 +445,7 @@ with dashboard_tab:
                 ).set_index("candidate")
                 st.bar_chart(score_df)
             else:
-                st.info("no ranking data available yet")
+                st.info("top matches are loaded only when requested")
 
 with ranking_tab:
     with st.container():
@@ -472,14 +511,27 @@ with ranking_tab:
                     key="ranking_job_id",
                 )
 
-                ranking_data, ranking_error = fetch_json(
-                    f"{backend_url}/matches/by-job/{ranking_job_id}",
-                    headers=headers,
-                )
+                ranking_data = None
+                ranking_error = None
+                if st.button("Load rankings", key=f"load_rankings_{ranking_job_id}"):
+                    with st.spinner("Ranking candidates..."):
+                        ranking_data, ranking_error = fetch_json(
+                            f"{backend_url}/matches/by-job/{ranking_job_id}",
+                            headers=headers,
+                            timeout=60,
+                        )
+                        if not ranking_error:
+                            st.session_state["latest_ranking_data"] = ranking_data or []
+                            st.session_state["latest_ranking_job_id"] = ranking_job_id
+                elif st.session_state.get("latest_ranking_job_id") == ranking_job_id:
+                    ranking_data = st.session_state.get("latest_ranking_data", [])
+
                 candidate_rankings = get_unique_rankings(ranking_data or [])
 
                 if ranking_error:
                     st.error(ranking_error)
+                elif not ranking_data:
+                    st.info("Click 'Load rankings' to generate and view candidate matches for this job.")
                 elif not candidate_rankings:
                     st.info("No ranked candidates yet.")
                 else:
@@ -586,63 +638,82 @@ with comparison_tab:
                 key="comparison_job_id",
             )
 
-            comparison_data, comparison_error = fetch_json(
-                f"{backend_url}/matches/by-job/{comparison_job_id}",
-                headers=headers,
-            )
-            comparison_candidates = get_unique_rankings(comparison_data or [])
+            comparison_results = []
+            comparison_error = None
+
+            if st.button("Load comparison", key=f"load_comparison_{comparison_job_id}"):
+                with st.spinner("Loading candidate comparison..."):
+                    comparison_data, comparison_error = fetch_json(
+                        f"{backend_url}/matches/by-job/{comparison_job_id}",
+                        headers=headers,
+                        timeout=60,
+                    )
+                    comparison_candidates = get_unique_rankings(comparison_data or [])
+
+                    if not comparison_error and comparison_candidates:
+                        comparison_results, load_error = load_comparison_results(
+                            comparison_job_id,
+                            comparison_candidates,
+                            headers,
+                        )
+                        comparison_error = load_error
+                        if not comparison_error:
+                            st.session_state["latest_comparison_results"] = comparison_results
+                            st.session_state["latest_comparison_job_id"] = comparison_job_id
+            elif st.session_state.get("latest_comparison_job_id") == comparison_job_id:
+                comparison_results = st.session_state.get("latest_comparison_results", [])
 
             if comparison_error:
                 st.error(comparison_error)
-            elif not comparison_candidates:
-                st.info("No candidate matches are available for this job yet.")
+            elif not comparison_results:
+                st.info("Click 'Load comparison' to compare candidates for this job.")
             else:
-                comparison_results, load_error = load_comparison_results(
-                    comparison_job_id,
-                    comparison_candidates,
-                    headers,
-                )
-
-                if load_error:
-                    st.error(load_error)
-                elif not comparison_results:
-                    st.info("No comparison results are available yet.")
-                else:
-                    for result in comparison_results:
-                        with st.container(border=True):
+                for result in comparison_results:
+                    with st.container(border=True):
+                        header_left, header_right = st.columns([5, 1], gap="medium")
+                        with header_left:
                             st.subheader(result["filename"])
-
-                            # keep the summary compact so it is easy to scan
-                            final_left, final_right = st.columns([2, 1], gap="medium")
-
-                            with final_left:
-                                st.markdown("**Final AI Match**")
-                                st.metric(
-                                    "Percentage Score",
-                                    f"{result['percentage_score']}%",
+                        with header_right:
+                            if st.button("Use in AI", key=f"use_in_ai_{comparison_job_id}_{result['resume_id']}"):
+                                st.session_state["ai_resume_id"] = result["resume_id"]
+                                st.session_state["ai_job_id"] = comparison_job_id
+                                st.session_state["recruiter_ai_notice"] = (
+                                    f"{result['filename']} is ready in the AI Assistant for "
+                                    f"{next(job['title'] for job in jobs if job['id'] == comparison_job_id)}."
                                 )
+                                st.rerun()
 
-                            with final_right:
-                                st.markdown("**Match Label**")
-                                st.metric("Final Label", result["match_label"])
+                        # keep the summary compact so it is easy to scan
+                        final_left, final_right = st.columns([2, 1], gap="medium")
 
-                            st.markdown("**Score Summary**")
-                            score_col_1, score_col_2, score_col_3, score_col_4 = st.columns(4, gap="medium")
-                            score_col_1.metric("Final Score", f"{result['final_score']:.2f}")
-                            score_col_2.metric("Rating Score", f"{result['rating_score']}/10")
-                            score_col_3.metric("ATS Score", f"{round(result['ats_score'] * 100)}%")
-                            score_col_4.metric("TF-IDF Score", f"{round(result['tfidf_score'] * 100)}%")
+                        with final_left:
+                            st.markdown("**Final AI Match**")
+                            st.metric(
+                                "Percentage Score",
+                                f"{result['percentage_score']}%",
+                            )
 
-                            # keep the detailed reasoning inside an expander
-                            with st.expander("View Details"):
-                                st.markdown("**Matching Skills**")
-                                st.write(format_skills(result["matching_skills"]))
+                        with final_right:
+                            st.markdown("**Match Label**")
+                            st.metric("Final Label", result["match_label"])
 
-                                st.markdown("**Missing Skills**")
-                                st.write(format_skills(result["missing_skills"]))
+                        st.markdown("**Score Summary**")
+                        score_col_1, score_col_2, score_col_3, score_col_4 = st.columns(4, gap="medium")
+                        score_col_1.metric("Final Score", f"{result['final_score']:.2f}")
+                        score_col_2.metric("Rating Score", f"{result['rating_score']}/10")
+                        score_col_3.metric("ATS Score", f"{round(result['ats_score'] * 100)}%")
+                        score_col_4.metric("TF-IDF Score", f"{round(result['tfidf_score'] * 100)}%")
 
-                                st.markdown("**Explanation**")
-                                st.write(result["explanation"])
+                        # keep the detailed reasoning inside an expander
+                        with st.expander("View Details"):
+                            st.markdown("**Matching Skills**")
+                            st.write(format_skills(result["matching_skills"]))
+
+                            st.markdown("**Missing Skills**")
+                            st.write(format_skills(result["missing_skills"]))
+
+                            st.markdown("**Explanation**")
+                            st.write(result["explanation"])
 
 with ai_tab:
     with st.container():
@@ -652,6 +723,10 @@ with ai_tab:
             "<div class='section-subtitle'>Ask simple questions about a selected cv or job.</div>",
             unsafe_allow_html=True,
         )
+
+        recruiter_ai_notice = st.session_state.pop("recruiter_ai_notice", None)
+        if recruiter_ai_notice:
+            st.success(recruiter_ai_notice)
 
         selected_resume_id = None
         selected_job_id = None

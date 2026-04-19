@@ -205,17 +205,23 @@ def detect_intent(question: str) -> str:
     # normalize the question for simple keyword matching
     normalized_question = question.lower()
 
-    if "skills" in normalized_question:
-        return "skills_in_cv"
-
-    if "missing" in normalized_question or "lack" in normalized_question:
+    if (
+        "missing" in normalized_question
+        or "lack" in normalized_question
+        or "gap" in normalized_question
+        or "gaps" in normalized_question
+        or "improve" in normalized_question
+    ):
         return "missing_skills"
 
     if "best" in normalized_question or "top" in normalized_question:
         return "best_candidate"
 
-    if "why" in normalized_question or "score" in normalized_question:
+    if "why" in normalized_question or "score" in normalized_question or "match" in normalized_question:
         return "explain_match"
+
+    if "skills" in normalized_question:
+        return "skills_in_cv"
 
     return "general"
 
@@ -266,9 +272,9 @@ def generate_response(intent, context_data):
             return response
         if job_skills and cv_skills:
             responses = [
-                f"{candidate_name} appears to cover the main extracted skills for {job_title}.",
-                f"The CV already matches the main skills identified for {job_title}.",
-                f"{candidate_name} seems to meet the key extracted skill requirements for {job_title}.",
+                f"{candidate_name} appears to cover the main extracted skills for {job_title}, so there are no obvious skill gaps in the extracted list.",
+                f"The CV already matches the main skills identified for {job_title}, so the next improvement would be tailoring the wording and examples more closely to the role.",
+                f"{candidate_name} seems to meet the key extracted skill requirements for {job_title}, but the CV could still improve by making the most relevant experience more explicit.",
             ]
             return random.choice(responses)
         return f"I could not compare the CV against the job requirements for {job_title}."
@@ -467,23 +473,69 @@ def build_hybrid_score_explanation(percentage_score, rating_score, match_label, 
     )
 
 
-def generate_match_explanation(cv_text, job_text, final_score=None):
-    # run the multi-step analysis first
-    analysis = multi_step_match_analysis(cv_text, job_text)
+def generate_match_explanation(cv_text, job_text, final_score=None, analysis=None):
+    # reuse the current analysis when it is already available so score details stay consistent
+    if analysis is None:
+        analysis = multi_step_match_analysis(cv_text, job_text)
 
     # get the main values from the analysis
     matching_skills = analysis.get("matching_skills", [])
     missing_skills = analysis.get("missing_skills", [])
     score = float(final_score) if final_score is not None else analysis.get("final_score", 0.0)
     score_data = build_match_score_data(score)
+    embedding_percent = round(float(analysis.get("embedding_score", 0.0)) * 100)
+    skill_overlap_percent = round(float(analysis.get("skill_overlap_score", 0.0)) * 100)
+    penalty_percent = round(float(analysis.get("penalty", 0.0)) * 100)
+    core_matching_count = int(analysis.get("core_matching_count", 0))
 
-    return build_hybrid_score_explanation(
-        score_data["percentage_score"],
-        score_data["rating_score"],
-        score_data["match_label"],
-        matching_skills,
-        missing_skills,
+    matching_text = _format_list(sorted(set(matching_skills))[:3])
+    missing_text = _format_list(sorted(set(missing_skills))[:3])
+
+    if matching_skills and missing_skills:
+        return (
+            f"This candidate is a {score_data['match_label']} with a score of "
+            f"{score_data['percentage_score']} percent and a rating of {score_data['rating_score']} out of 10. "
+            f"They match important skills like {matching_text}, but are still missing {missing_text}. "
+            f"The final score also depends on the overall semantic similarity of the CV to the job "
+            f"({embedding_percent} percent), not just the extracted skill list."
+        )
+
+    if matching_skills and not missing_skills and score_data["percentage_score"] < 100:
+        return (
+            f"This candidate is a {score_data['match_label']} with a score of "
+            f"{score_data['percentage_score']} percent and a rating of {score_data['rating_score']} out of 10. "
+            f"The extracted job skills are covered by strengths such as {matching_text}, so there are no clear "
+            f"missing skills in the extracted list. The score stays below 100 percent because the hybrid score "
+            f"also checks overall semantic similarity ({embedding_percent} percent) and weighted skill alignment "
+            f"({skill_overlap_percent} percent), and perfect scores are kept for exceptionally strong matches."
+        )
+
+    if not matching_skills:
+        if missing_skills:
+            return (
+                f"This candidate is a weak match with a score of {score_data['percentage_score']} percent "
+                f"and a rating of {score_data['rating_score']} out of 10. There are no clear matching skills, "
+                f"and they are still missing skills such as {missing_text}, which keeps the score low."
+            )
+
+        return (
+            f"This candidate is a weak match with a score of {score_data['percentage_score']} percent "
+            f"and a rating of {score_data['rating_score']} out of 10. There are no clear matching skills, "
+            f"so the result stays in the weak match range."
+        )
+
+    explanation = (
+        f"This candidate is a {score_data['match_label']} with a score of "
+        f"{score_data['percentage_score']} percent and a rating of {score_data['rating_score']} out of 10. "
+        f"The strongest overlap is in {matching_text}."
     )
+
+    if penalty_percent > 0:
+        explanation += f" A penalty of {penalty_percent} percent was applied for missing important skills."
+    elif core_matching_count > 0:
+        explanation += " The final result is supported by solid core skill coverage."
+
+    return explanation
 
 
 def _format_list(values):
